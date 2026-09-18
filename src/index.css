@@ -35,7 +35,7 @@
   --button: #eef3eb;
   --button-hover: #e3ecdf;
   /* 상단 고정 영역(헤더 + 탭) 높이. sticky 요소의 top 오프셋 기준으로 씁니다. */
-  --app-header-h: 6.25rem;
+  --app-header-h: 6.5rem;
 }
 
 @theme inline {

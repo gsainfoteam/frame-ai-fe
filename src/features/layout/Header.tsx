@@ -49,7 +49,7 @@ export function Header() {
 
   return (
     <div className="mx-auto flex max-w-[1232px] flex-wrap items-center gap-x-3 gap-y-2 px-4 py-2.5 sm:px-6">
-      <Link to="/" aria-label="frame 영상 스튜디오 홈" className="rounded-md no-underline text-foreground">
+      <Link to="/" aria-label="Frame 영상 스튜디오 홈" className="rounded-md no-underline text-foreground">
         <BrandLogo />
       </Link>
       <span aria-hidden="true" className="hidden h-5 w-px bg-line sm:block" />
