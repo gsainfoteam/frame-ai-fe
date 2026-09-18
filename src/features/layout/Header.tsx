@@ -1,6 +1,8 @@
 import { useState } from 'react'
+import { Link } from 'react-router'
 import { API_DOCS_URL, MODEL_LABEL } from '@/config/constants'
 import { Button } from '@/shared/ui/Button'
+import { BrandLogo } from '@/shared/ui/Logo'
 import { Dialog } from '@/shared/ui/Dialog'
 import { Field, Select, TextInput } from '@/shared/ui/Field'
 import { cn } from '@/shared/lib/cn'
@@ -47,10 +49,9 @@ export function Header() {
 
   return (
     <div className="mx-auto flex max-w-[1232px] flex-wrap items-center gap-x-3 gap-y-2 px-4 py-2.5 sm:px-6">
-      <p className="text-[17px] font-semibold tracking-tight">
-        frame
-        <span className="ml-1.5 text-xs font-medium tracking-normal text-muted">영상 스튜디오</span>
-      </p>
+      <Link to="/" aria-label="frame 영상 스튜디오 홈" className="rounded-md no-underline text-foreground">
+        <BrandLogo />
+      </Link>
       <span aria-hidden="true" className="hidden h-5 w-px bg-line sm:block" />
       <div className="flex min-w-0 items-center gap-2">
         <Select
