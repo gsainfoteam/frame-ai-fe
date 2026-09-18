@@ -1,0 +1,191 @@
+@import "tailwindcss";
+
+:root {
+  /* surfaces */
+  --background: #f4f7f3;
+  --panel: #ffffff;
+  --surface: #f8faf6;
+  --surface-strong: #eef3ea;
+  --viewer: #e9eee7;
+
+  /* text */
+  --foreground: #1b2a20;
+  --muted: #5c6b61;
+  --faint: #7c8a80;
+
+  /* lines */
+  --line: #dee5dc;
+  --line-strong: #c6d2c5;
+
+  /* brand */
+  --accent: #256b43;
+  --accent-soft: #e7f0e6;
+  --primary: #2f7048;
+  --primary-hover: #245939;
+
+  /* feedback */
+  --danger: #a3342a;
+  --danger-soft: #fdf1ef;
+  --danger-line: #eccdc7;
+
+  /* controls */
+  --input: #ffffff;
+  --input-border: #c6d2c5;
+  --placeholder: #90a094;
+  --button: #eef3eb;
+  --button-hover: #e3ecdf;
+  /* 상단 고정 영역(헤더 + 탭) 높이. sticky 요소의 top 오프셋 기준으로 씁니다. */
+  --app-header-h: 6.25rem;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-panel: var(--panel);
+  --color-surface: var(--surface);
+  --color-surface-strong: var(--surface-strong);
+  --color-viewer: var(--viewer);
+
+  --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-faint: var(--faint);
+
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-danger-line: var(--danger-line);
+
+  --color-input: var(--input);
+  --color-input-border: var(--input-border);
+  --color-placeholder: var(--placeholder);
+  --color-button: var(--button);
+  --color-button-hover: var(--button-hover);
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+  --radius-xl: 1rem;
+
+  --shadow-card: 0 1px 2px #1b2a200a, 0 1px 1px #1b2a2008;
+  --shadow-pop: 0 10px 30px #1b2a2014, 0 2px 8px #1b2a200f;
+
+  --font-sans: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Pretendard",
+    "Malgun Gothic", system-ui, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* 11px 보조 라벨과 13px 설명문을 위해 xs 계열만 조정하고 나머지는 기본 스케일을 씁니다. */
+  --text-2xs: 0.6875rem;
+  --text-2xs--line-height: 1.45;
+  --text-xs: 0.8125rem;
+  --text-xs--line-height: 1.55;
+  --text-md: 0.9375rem;
+  --text-md--line-height: 1.6;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  font-size: 0.9375rem;
+  line-height: 1.6;
+  color-scheme: light;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  /* 한국어 문장이 단어 중간에서 끊기지 않게 하고, 긴 URL·ID는 필요할 때만 끊습니다. */
+  word-break: keep-all;
+  overflow-wrap: break-word;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  margin: 0;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.35;
+}
+
+p {
+  margin: 0;
+}
+
+a {
+  color: var(--accent);
+  text-underline-offset: 2px;
+}
+
+:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+summary {
+  list-style: none;
+}
+
+summary::-webkit-details-marker {
+  display: none;
+}
+
+::placeholder {
+  color: var(--placeholder);
+}
+
+dialog {
+  /* Tailwind preflight가 margin을 0으로 만들어 기본 중앙 정렬이 사라집니다. */
+  margin: auto;
+  width: min(560px, calc(100% - 28px));
+  max-height: min(88vh, 46rem);
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 1rem;
+  padding: 0;
+  background: var(--panel);
+  color: var(--foreground);
+  box-shadow: var(--shadow-pop);
+}
+
+dialog::backdrop {
+  background: #16241b66;
+  backdrop-filter: blur(2px);
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.scrollbar-slim {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
+}
+
+.scrollbar-slim::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.scrollbar-slim::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: var(--line-strong);
+  background-clip: content-box;
+}
