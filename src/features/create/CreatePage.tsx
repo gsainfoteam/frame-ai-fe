@@ -6,6 +6,7 @@ import { Disclosure } from '@/shared/ui/Disclosure'
 import { EmptyState } from '@/shared/ui/EmptyState'
 import { Field, TextInput } from '@/shared/ui/Field'
 import { StatusBadge } from '@/shared/ui/StatusBadge'
+import { cn } from '@/shared/lib/cn'
 import { safeUrl } from '@/shared/lib/url'
 import { toast } from '@/stores/toastStore'
 import { useWorkspaceStore } from '@/stores/workspaceStore'
@@ -127,7 +128,17 @@ function ResultPanel() {
   return (
     <aside className="scrollbar-slim space-y-4 lg:sticky lg:top-[calc(var(--app-header-h)+1.25rem)] lg:max-h-[calc(100svh-var(--app-header-h)-2.5rem)] lg:self-start lg:overflow-y-auto lg:pr-1">
       <Card>
-        <CardHeader title="생성 결과" actions={<StatusBadge status={badge}>{status}</StatusBadge>} />
+        <CardHeader
+          title="생성 결과"
+          description={
+            notice ? (
+              <span role="status" className={cn('whitespace-pre-wrap', noticeError && 'text-danger')}>
+                {notice}
+              </span>
+            ) : null
+          }
+          actions={<StatusBadge status={badge}>{status}</StatusBadge>}
+        />
         <div className="flex aspect-video min-h-44 items-center justify-center overflow-hidden rounded-md border border-line bg-viewer">
           {preview ? (
             preview.kind === 'video' || preview.kind === 'audio' ? (
@@ -151,13 +162,8 @@ function ResultPanel() {
             <EmptyState title="생성 결과 미리보기" body={'장면을 설명하고 생성하면\n여기에서 결과를 확인할 수 있어요.'} />
           )}
         </div>
-        {notice ? (
-          <p className={`mt-4 whitespace-pre-wrap text-xs ${noticeError ? 'text-danger' : 'text-muted'}`} role="status">
-            {notice}
-          </p>
-        ) : null}
         {media.length ? (
-          <div className="mt-3 space-y-2.5 border-t border-line pt-3">
+          <div className="mt-4 space-y-2.5 border-t border-line pt-4">
             {media.map((item) => (
               <MediaBlock key={item.media_id || item.url} item={item} jobId={jobId} />
             ))}
