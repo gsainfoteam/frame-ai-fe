@@ -35,7 +35,8 @@ export function Header() {
       toast('업로드 또는 접수가 끝난 뒤 프로젝트를 바꿔주세요.', true)
       return false
     }
-    if (!projects.some((p) => p.id === id)) return false
+    // 방금 만든 프로젝트로도 바로 전환해야 하므로 렌더 시점 목록이 아닌 최신 상태를 봅니다.
+    if (!useProjectStore.getState().projects.some((p) => p.id === id)) return false
     if ((workspace.prompt || workspace.references.length || workspace.imageUrl) && !confirm('프로젝트를 바꾸면 현재 개별 장면 설명과 참조를 비웁니다. 공통 설정과 생성 기록은 유지됩니다. 계속할까요?')) {
       return false
     }
