@@ -6,17 +6,24 @@ Letsur Seedance 2.5로 영상을 만드는 로컬 작업 공간입니다. API �
 
 ```bash
 bun install
+cp .env.example .env
 bun run dev
 ```
 
-브라우저에서 Vite 개발 서버를 엽니다. Letsur API는 개발 서버가 `/api`로 중계하므로 별도의 Python 프록시는 필요 없습니다.
+브라우저에서 Vite 개발 서버를 엽니다. `VITE_LETSUR_API_BASE`가 `/api`이면 개발 서버가 `https://gw.letsur.ai/v1`로 중계합니다.
+
+게이트웨이를 브라우저에서 직접 호출하려면 `.env`에서 값을 바꿉니다.
+
+```
+VITE_LETSUR_API_BASE=https://gw.letsur.ai/v1
+```
 
 ```bash
 bun run build
 bun run preview
 ```
 
-정적 호스팅만 하면 CORS로 API 호출이 막힐 수 있습니다. 그때는 자체 백엔드를 붙이면 됩니다.
+정적 호스팅만 하면 CORS로 API 호출이 막힐 수 있습니다. 그때는 자체 백엔드를 붙이면 됩니다. Cloudflare Pages에서는 빌드 환경 변수로 `VITE_LETSUR_API_BASE`를 넣습니다.
 
 ## 사용 순서
 
