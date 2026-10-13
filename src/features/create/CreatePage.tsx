@@ -11,6 +11,13 @@ import { safeUrl } from '@/shared/lib/url'
 import { toast } from '@/stores/toastStore'
 import { useWorkspaceStore } from '@/stores/workspaceStore'
 import { useJob } from '@/features/create/jobContext'
+import { isFinalizeRequest } from '@/api/types'
+import { isPreviewRecord } from '@/domain/seedance'
+import { inquiryText } from '@/domain/support'
+import { formatAmount, sumUsage } from '@/domain/usage'
+import { copyText } from '@/shared/lib/clipboard'
+import { formatTimestamp } from '@/shared/lib/time'
+import { useProjectStore } from '@/stores/projectStore'
 import { GenerateBar, GenerationSettings, SceneForm } from '@/features/create/CreateForm'
 
 export function CreatePage() {
@@ -53,9 +60,18 @@ function MediaBlock({ item, jobId }: { item: ResultMedia; jobId: string }) {
         <StatusBadge status={mediaStateTone[item.state] ?? 'idle'}>{stateLabel}</StatusBadge>
       </div>
       {item.url_expires_at ? (
-        <p className="mt-1 text-xs text-muted">링크 만료 · {new Date(item.url_expires_at * 1000).toLocaleString('ko-KR')}</p>
+        <p className="mt-1 text-xs text-muted">링크 만료 · {formatTimestamp(item.url_expires_at)}</p>
       ) : null}
-      {item.url_unavailable_reason ? <p className="mt-1 text-xs text-muted">파일 상태: {item.url_unavailable_reason}</p> : null}
+      {item.expires_at ? (
+        <p className="mt-1 text-xs text-muted">
+          파일 보관 만료 · {formatTimestamp(item.expires_at)} · 링크를 다시 발급해도 늘어나지 않습니다
+        </p>
+      ) : null}
+      {item.url_unavailable_reason ? (
+        <p className="mt-1 text-xs text-muted">
+          파일 상태: {item.url_unavailable_reason === 'copying' ? '복사 중 · 자동으로 다시 조회합니다' : item.url_unavailable_reason}
+        </p>
+      ) : null}
       <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
         {url ? (
           <Button size="sm" onClick={() => showMedia(url, item.kind, item.media_id)}>
@@ -101,6 +117,63 @@ function MediaBlock({ item, jobId }: { item: ResultMedia; jobId: string }) {
         ) : null}
       </div>
     </div>
+  )
+}
+
+function JobSummary({ jobId }: { jobId: string }) {
+  const records = useProjectStore((s) => s.records)
+  const set = useWorkspaceStore((s) => s.set)
+  const record = records.find((item) => item.id === jobId)
+  if (!record) return null
+  const finalizeOf = isFinalizeRequest(record.request) ? record.request.draft_job : null
+  const source = finalizeOf ? records.find((item) => item.id === finalizeOf) : undefined
+  const total = finalizeOf ? sumUsage([source?.usage, record.usage]) : null
+  const storeOff = record.request?.store_media === false
+
+  return (
+    <div className="mt-4 space-y-2 border-t border-line pt-4 text-xs text-muted">
+      {isPreviewRecord(record) ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="rounded-full bg-accent-soft px-2 py-0.5 font-medium text-accent">480p 시안</span>
+          {record.status === 'succeeded' ? (
+            <Button size="sm" variant="primary" onClick={() => set({ finalizeTarget: record.id })}>
+              1080p로 확정 ↗
+            </Button>
+          ) : (
+            <span>생성이 끝나면 1080p로 확정할 수 있습니다.</span>
+          )}
+        </div>
+      ) : null}
+      {finalizeOf ? (
+        <p>
+          <span className="rounded-full bg-accent-soft px-2 py-0.5 font-medium text-accent">1080p 확정</span>{' '}
+          원본 시안 <span className="break-all font-mono">{finalizeOf}</span>
+          {total ? ` · 시안 포함 총액 ${formatAmount(total.amount, total.currency)}` : ' · 시안 포함 총액은 두 작업 비용이 모두 확정된 뒤 표시됩니다'}
+        </p>
+      ) : null}
+      {storeOff ? <p>임시 보관 결과입니다. 파일이 준비되면 바로 내려받으세요.</p> : null}
+    </div>
+  )
+}
+
+function InquiryButton({ jobId }: { jobId: string }) {
+  const records = useProjectStore((s) => s.records)
+  const lastSubmission = useWorkspaceStore((s) => s.lastSubmission)
+  // 방금 실패한 제출이 있으면 그 요청을, 아니면 화면의 작업을 문의 대상으로 씁니다.
+  const record = lastSubmission ? undefined : records.find((item) => item.id === jobId)
+  if (!record && !lastSubmission) return null
+  return (
+    <Button
+      variant="subtle"
+      title={lastSubmission ? '방금 실패한 요청의 문의 정보' : '현재 작업의 문의 정보'}
+      onClick={() =>
+        void copyText(inquiryText({ record, failure: lastSubmission })).then((ok) =>
+          toast(ok ? '문의용 정보를 복사했습니다. API 키는 포함되지 않습니다.' : '복사하지 못했습니다.', !ok),
+        )
+      }
+    >
+      문의용 정보 복사
+    </Button>
   )
 }
 
@@ -162,6 +235,7 @@ function ResultPanel() {
             <EmptyState title="생성 결과 미리보기" body={'장면을 설명하고 생성하면\n여기에서 결과를 확인할 수 있어요.'} />
           )}
         </div>
+        {jobId ? <JobSummary jobId={jobId} /> : null}
         {media.length ? (
           <div className="mt-4 space-y-2.5 border-t border-line pt-4">
             {media.map((item) => (
@@ -186,13 +260,14 @@ function ResultPanel() {
             onChange={(e) => set({ jobId: e.target.value })}
           />
         </Field>
-        <div className="mt-3 flex gap-2">
+        <div className="mt-3 flex flex-wrap gap-2">
           <Button onClick={lookup} disabled={polling}>
             {polling ? '자동 갱신 중…' : '조회 / 자동 갱신'}
           </Button>
           <Button variant="subtle" onClick={stop} disabled={!polling}>
             갱신 중지
           </Button>
+          <InquiryButton jobId={jobId.trim()} />
         </div>
         <Disclosure className="mt-3" label="서버 응답 보기">
           <CodeBlock>{rawResponse}</CodeBlock>

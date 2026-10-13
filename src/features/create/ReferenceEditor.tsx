@@ -1,5 +1,6 @@
 import { FILE_SIZE_MIB, MIME_BY_TYPE, ROLES, SEEDANCE_GUIDE_URL, isAllowedMime } from '@/config/constants'
-import { dimensionLabel, readImageDimensions } from '@/shared/lib/image'
+import { dimensionLabel, readImageDimensions, readMediaDuration } from '@/shared/lib/image'
+import { durationWarning, formatSeconds, imageWarnings } from '@/domain/inputChecks'
 import { Button } from '@/shared/ui/Button'
 import { FileButton } from '@/shared/ui/FileButton'
 import { Checkbox, Select, TextInput } from '@/shared/ui/Field'
@@ -32,6 +33,7 @@ export function ReferenceCard({ value, shared, onChange, onRemove }: Props) {
       url: '',
       mediaId: undefined,
       file: null,
+      durationSec: undefined,
       status: '',
     })
   }
@@ -136,14 +138,30 @@ export function ReferenceCard({ value, shared, onChange, onRemove }: Props) {
           }
           onChange={async (event) => {
             const file = event.target.files?.[0] ?? null
-            onChange({ file, url: '', mediaId: undefined, status: '파일을 선택했습니다. 파일 업로드 버튼을 눌러주세요.' })
-            if (file && value.type === 'image') {
+            onChange({
+              file,
+              url: '',
+              mediaId: undefined,
+              durationSec: undefined,
+              status: '파일을 선택했습니다. 파일 업로드 버튼을 눌러주세요.',
+            })
+            if (!file) return
+            if (value.type === 'image') {
               const dimensions = await readImageDimensions(file)
+              const warnings = dimensions ? imageWarnings(dimensions.width, dimensions.height) : []
               onChange({
-                file,
-                url: '',
-                mediaId: undefined,
-                status: `${dimensions ? `${dimensionLabel(dimensions.width, dimensions.height)} · ` : '크기 확인 불가 · '}파일 업로드 버튼을 눌러주세요.`,
+                status:
+                  `${dimensions ? `${dimensionLabel(dimensions.width, dimensions.height)} · ` : '크기 확인 불가 · '}파일 업로드 버튼을 눌러주세요.` +
+                  warnings.map((warning) => `\n주의: ${warning}`).join(''),
+              })
+            } else {
+              const seconds = await readMediaDuration(file, value.type)
+              const warning = seconds === null ? null : durationWarning(value.type, seconds)
+              onChange({
+                durationSec: seconds ?? undefined,
+                status:
+                  `${seconds === null ? '길이 확인 불가' : formatSeconds(seconds)} · 파일 업로드 버튼을 눌러주세요.` +
+                  (warning ? `\n주의: ${warning}` : ''),
               })
             }
           }}
@@ -177,7 +195,7 @@ export function ReferenceCard({ value, shared, onChange, onRemove }: Props) {
         </a>
       </p>
       {value.status ? (
-        <p className="mt-1.5 break-words text-xs text-accent" role="status">
+        <p className="mt-1.5 whitespace-pre-wrap break-words text-xs text-accent" role="status">
           {value.status}
         </p>
       ) : null}

@@ -1,3 +1,29 @@
+/** HTTP 상태별 확인·조치 안내 (가이드 §8) */
+export function httpHint(status: number, code?: string, raw = '') {
+  switch (status) {
+    case 400:
+      return '필드명·타입·조합을 확인하세요. 시안은 480p, 확정은 1080p만 사용하고, 확정 요청에는 프롬프트·길이·비율 등을 넣지 않습니다.'
+    case 401:
+      return 'API 키와 Authorization: Bearer 형식을 확인하세요.'
+    case 402:
+      return '스페이스 잔액이 부족합니다. 잔액을 확인하세요.'
+    case 404:
+      return '모델명·이용 권한·파일 또는 작업 ID와 스페이스를 확인하세요.'
+    case 410:
+      return '링크 또는 파일 보관기한이 만료되었습니다. 링크만 만료됐다면 다시 발급하고, 파일이 만료됐다면 더 이상 받을 수 없습니다.'
+    case 429:
+      return code === 'queue_full' || /queue_full/.test(raw)
+        ? '대기열이 가득 찼습니다. 요청은 접수되지 않았으니 안내된 시간 뒤에 다시 시도하세요.'
+        : '사용량 한도에 도달했습니다. 스페이스의 한도를 확인하세요. 자동으로 재시도하지 않습니다.'
+    case 503:
+      return code === 'MEDIA_NOT_READY' || /MEDIA_NOT_READY/.test(raw)
+        ? '결과 파일을 복사하고 있습니다. 잠시 뒤 다시 조회하세요.'
+        : '서비스가 일시적으로 응답하지 않습니다. 잠시 뒤 다시 조회하세요.'
+    default:
+      return ''
+  }
+}
+
 export function describeError(error: unknown) {
   const e = (error && typeof error === 'object' ? error : {}) as Record<string, unknown>
   const lines: string[] = []

@@ -2,6 +2,7 @@ import { BrowserRouter, Route, Routes } from 'react-router'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { JobProvider } from '@/features/create/JobProvider'
 import { CreatePage } from '@/features/create/CreatePage'
+import { PreviewsPage } from '@/features/preview/PreviewsPage'
 import { ProjectPage } from '@/features/project/ProjectPage'
 import { HistoryPage } from '@/features/history/HistoryPage'
 import { GalleryPage } from '@/features/gallery/GalleryPage'
@@ -17,6 +18,7 @@ export default function App() {
           <Routes>
             <Route element={<StudioLayout />}>
               <Route index element={<CreatePage />} />
+              <Route path="previews" element={<PreviewsPage />} />
               <Route path="project" element={<ProjectPage />} />
               <Route path="history" element={<HistoryPage />} />
               <Route path="library" element={<GalleryPage />} />
