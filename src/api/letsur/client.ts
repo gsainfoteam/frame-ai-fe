@@ -7,15 +7,15 @@ import type {
   UploadTrack,
   VideoGenerationRequest,
 } from '@/api/types'
-import { LetsurApiError, parseRetryAfter } from '@/api/errors'
+import { LetsurApiError, extractErrorCode, extractErrorRef, parseRetryAfter } from '@/api/errors'
 import { DEFAULT_REQUEST_TIMEOUT_MS, FRAME_DOWNLOAD_TIMEOUT_MS, IMAGE_MIMES, UPLOAD_TIMEOUT_MS, isAllowedMime } from '@/config/constants'
 import { letsurApiBase } from '@/config/env'
-import { describeError } from '@/domain/errors'
+import { describeError, httpHint } from '@/domain/errors'
 
 export function createLetsurClient(getKey: () => string): VideoApi {
   async function request<T>(path: string, options: RequestInit & { timeout?: number } = {}): Promise<T> {
     const key = getKey().trim()
-    if (!key) throw new LetsurApiError('API 키를 입력해주세요.')
+    if (!key) throw new LetsurApiError('API 키를 입력해주세요.', { code: 'missing_api_key' })
 
     const timeout = options.timeout ?? DEFAULT_REQUEST_TIMEOUT_MS
     const controller = new AbortController()
@@ -38,17 +38,27 @@ export function createLetsurClient(getKey: () => string): VideoApi {
       try {
         json = JSON.parse(raw)
       } catch {
-        throw new LetsurApiError(`응답을 해석할 수 없습니다 (HTTP ${res.status}).`)
+        const hint = res.ok ? '' : httpHint(res.status, undefined, raw)
+        throw new LetsurApiError(`응답을 해석할 수 없습니다 (HTTP ${res.status}).${hint ? `\n${hint}` : ''}`, {
+          status: res.status,
+          retry: parseRetryAfter(res.headers.get('Retry-After')),
+        })
       }
 
       if (!res.ok) {
         const payload = json as { error?: unknown }
-        throw new LetsurApiError(`HTTP ${res.status} · ${describeError(payload.error ?? json)}`, {
-          status: res.status,
-          code: (payload.error as { code?: string } | undefined)?.code,
-          retry: parseRetryAfter(res.headers.get('Retry-After')),
-          payload: json,
-        })
+        const code = extractErrorCode(json)
+        const hint = httpHint(res.status, code, raw)
+        throw new LetsurApiError(
+          `HTTP ${res.status} · ${describeError(payload.error ?? json)}${hint ? `\n${hint}` : ''}`,
+          {
+            status: res.status,
+            code,
+            ref: extractErrorRef(json),
+            retry: parseRetryAfter(res.headers.get('Retry-After')),
+            payload: json,
+          },
+        )
       }
       return json as T
     } catch (error) {

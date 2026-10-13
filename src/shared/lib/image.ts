@@ -20,3 +20,25 @@ export function readImageDimensions(file: Blob) {
     img.src = url
   })
 }
+
+/** 영상·오디오 파일의 길이(초). 브라우저가 읽지 못하면 null입니다. */
+export function readMediaDuration(file: Blob, kind: 'video' | 'audio') {
+  return new Promise<number | null>((resolve) => {
+    const url = URL.createObjectURL(file)
+    const el = document.createElement(kind)
+    let done = false
+    const finish = (value: number | null) => {
+      if (done) return
+      done = true
+      clearTimeout(timer)
+      el.removeAttribute('src')
+      URL.revokeObjectURL(url)
+      resolve(value)
+    }
+    const timer = setTimeout(() => finish(null), 8000)
+    el.preload = 'metadata'
+    el.onloadedmetadata = () => finish(Number.isFinite(el.duration) ? el.duration : null)
+    el.onerror = () => finish(null)
+    el.src = url
+  })
+}

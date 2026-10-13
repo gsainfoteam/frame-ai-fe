@@ -1,4 +1,9 @@
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router'
+import { ASSETS_PRICING_URL, PREVIEW_MAX_CANDIDATES } from '@/config/constants'
+import { PRICING_AS_OF, estimateGeneration, formatEstimate } from '@/domain/pricing'
+import { totalVideoWarning } from '@/domain/inputChecks'
+import { cn } from '@/shared/lib/cn'
 import { buildPayload, inputHint, validateDraftInputs, validatePayload } from '@/domain/seedance'
 import { Button } from '@/shared/ui/Button'
 import { Card, CardHeader } from '@/shared/ui/Card'
@@ -138,8 +143,12 @@ export function GenerationSettings() {
   const watermark = useWorkspaceStore((s) => s.watermark)
   const lastFrame = useWorkspaceStore((s) => s.lastFrame)
   const store = useWorkspaceStore((s) => s.store)
+  const generation = useWorkspaceStore((s) => s.generation)
+  const previewCount = useWorkspaceStore((s) => s.previewCount)
+  const hasVideoInput = useWorkspaceStore((s) => s.references.some((ref) => ref.type === 'video') || Boolean(s.mode))
   const set = useWorkspaceStore((s) => s.set)
   const continuityReady = lastFrame === 'true' && store === 'true'
+  const preview = generation === 'preview'
 
   return (
     <Card>
@@ -158,6 +167,41 @@ export function GenerationSettings() {
           </Button>
         }
       />
+      <Field
+        className="mb-4"
+        label="생성 방식"
+        hint={
+          preview
+            ? '480p로 구도·움직임을 비교한 뒤 고른 시안만 1080p로 확정합니다. 시안과 확정 모두 과금되고, 확정할 때는 내용을 바꿀 수 없습니다.'
+            : hasVideoInput
+              ? '영상 참조·편집·연장에는 시안을 사용할 수 없습니다.'
+              : '내용이 정해져 있거나 480p·720p로 충분하면 바로 생성이 더 저렴합니다.'
+        }
+      >
+        <div className="grid grid-cols-2 gap-1 rounded-md border border-line bg-surface p-1" role="radiogroup" aria-label="생성 방식">
+          {(
+            [
+              ['direct', '바로 생성'],
+              ['preview', '480p 시안 먼저'],
+            ] as const
+          ).map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              role="radio"
+              aria-checked={generation === value}
+              disabled={value === 'preview' && hasVideoInput}
+              onClick={() => set({ generation: value })}
+              className={cn(
+                'h-8 cursor-pointer rounded text-sm font-medium text-muted transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50',
+                generation === value && 'bg-panel text-accent shadow-card',
+              )}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </Field>
       <div className="grid gap-x-4 gap-y-3 sm:grid-cols-2">
         <Field label="영상 길이">
           <Select value={duration} onChange={(e) => set({ duration: e.target.value })}>
@@ -183,13 +227,25 @@ export function GenerationSettings() {
             />
           ) : null}
         </Field>
-        <Field label="해상도">
-          <Select value={resolution} onChange={(e) => set({ resolution: e.target.value })}>
-            <option value="480p">480p · 빠른 시안</option>
-            <option value="720p">720p · HD</option>
-            <option value="1080p">1080p · Full HD</option>
-          </Select>
-        </Field>
+        {preview ? (
+          <Field label="시안 개수" hint="후보마다 별도로 과금됩니다. 시드를 지정하면 후보마다 1씩 늘려 보냅니다.">
+            <Select value={String(previewCount)} onChange={(e) => set({ previewCount: Number(e.target.value) })}>
+              {Array.from({ length: PREVIEW_MAX_CANDIDATES }, (_, index) => index + 1).map((count) => (
+                <option key={count} value={count}>
+                  {count}개 · 480p
+                </option>
+              ))}
+            </Select>
+          </Field>
+        ) : (
+          <Field label="해상도">
+            <Select value={resolution} onChange={(e) => set({ resolution: e.target.value })}>
+              <option value="480p">480p · 빠른 확인</option>
+              <option value="720p">720p · HD</option>
+              <option value="1080p">1080p · Full HD</option>
+            </Select>
+          </Field>
+        )}
         <Field label="화면 비율">
           <Select value={ratio} onChange={(e) => set({ ratio: e.target.value })}>
             <option value="">입력에 따른 기본값</option>
@@ -232,7 +288,7 @@ export function GenerationSettings() {
           <Field label="결과 보관">
             <Select value={store} onChange={(e) => set({ store: e.target.value })}>
               <option value="">스페이스 설정 따르기</option>
-              <option value="false">임시 보관</option>
+              <option value="false">임시 보관 · 약 1시간</option>
               <option value="true">결과 보관</option>
             </Select>
           </Field>
@@ -265,6 +321,9 @@ export function GenerateBar() {
   useProjectStore()
   const submitting = useWorkspaceStore((s) => s.submitting)
   const uploads = useWorkspaceStore((s) => s.uploads)
+  const generation = useWorkspaceStore((s) => s.generation)
+  const previewCount = useWorkspaceStore((s) => s.previewCount)
+  const blockedFor = useCountdown(useWorkspaceStore((s) => s.submitBlock))
   const apiKey = useSessionStore((s) => s.apiKey)
   const openKeyDialog = useSessionStore((s) => s.setKeyDialogOpen)
   const draft = currentDraft()
@@ -277,6 +336,14 @@ export function GenerateBar() {
     error = (err as Error).message
   }
   const hint = inputHint(payload)
+  const videoSeconds = useWorkspaceStore.getState().references.flatMap((ref) =>
+    ref.type === 'video' && ref.durationSec !== undefined ? [ref.durationSec] : [],
+  )
+  const lengthWarning = totalVideoWarning(videoSeconds)
+  const count = generation === 'preview' ? previewCount : 1
+  const estimate = estimateGeneration(payload)
+  const label =
+    generation === 'preview' ? (count > 1 ? `480p 시안 ${count}개 만들기 ↗` : '480p 시안 만들기 ↗') : '영상 생성 ↗'
 
   return (
     <div className="space-y-2.5">
@@ -296,13 +363,39 @@ export function GenerateBar() {
           </Button>
         </div>
       )}
+      {lengthWarning ? <p className="text-xs text-danger">주의: {lengthWarning}</p> : null}
       <p className="text-xs text-muted">{hint}</p>
       <div className="sticky bottom-0 -mx-4 bg-gradient-to-t from-background via-background to-transparent px-4 pb-3 pt-3 sm:-mx-6 sm:px-6">
-        <Button variant="primary" size="lg" type="submit" block disabled={submitting || uploads > 0}>
-          {submitting ? '접수 중…' : uploads > 0 ? '업로드 중…' : '영상 생성 ↗'}
+        <Button variant="primary" size="lg" type="submit" block disabled={submitting || uploads > 0 || blockedFor > 0}>
+          {submitting ? '접수 중…' : uploads > 0 ? '업로드 중…' : blockedFor > 0 ? `대기열 가득 참 · ${blockedFor}초 뒤 다시 요청` : label}
         </Button>
-        <p className="mt-1.5 text-center text-xs text-faint">사용량에 따라 비용이 발생합니다.</p>
+        <p className="mt-1.5 text-center text-xs text-faint">
+          {estimate.ok
+            ? `예상 ${formatEstimate(estimate.cost * count)}${count > 1 ? ` (${count} × ${formatEstimate(estimate.cost)})` : ''} · ${estimate.resolution} ${estimate.duration}초`
+            : estimate.reason}
+          {estimate.ok && estimate.notes.length ? ` · ${estimate.notes.join(' ')}` : ''}
+          {' · '}단가 {PRICING_AS_OF} 기준·변동 가능 · 실제 청구액은 완료 후 확인{' '}
+          <a href={ASSETS_PRICING_URL} target="_blank" rel="noopener noreferrer">
+            최신 단가 ↗
+          </a>
+        </p>
       </div>
     </div>
   )
+}
+
+/** 남은 초. 0이면 대기 없음 */
+function useCountdown(block: { at: number; until: number } | null) {
+  const [clock, setClock] = useState({ block, now: block?.at ?? 0 })
+  if (clock.block !== block) setClock({ block, now: block?.at ?? 0 })
+  useEffect(() => {
+    if (!block) return
+    const timer = window.setInterval(() => {
+      const now = Date.now()
+      setClock({ block, now })
+      if (now >= block.until) window.clearInterval(timer)
+    }, 1000)
+    return () => window.clearInterval(timer)
+  }, [block])
+  return block ? Math.max(0, Math.ceil((block.until - clock.now) / 1000)) : 0
 }

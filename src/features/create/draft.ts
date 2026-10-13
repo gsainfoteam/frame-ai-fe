@@ -33,6 +33,7 @@ export function currentDraft(): PayloadDraft {
         role: (ref.role as MediaReference['role']) || 'reference_image',
       })),
     useShared: workspace.useShared,
+    preview: workspace.generation === 'preview',
     mode: workspace.mode,
     duration: workspace.duration,
     customDuration: workspace.customDuration,

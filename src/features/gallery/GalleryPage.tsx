@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import type { ImageAsset, MediaReference, Project } from '@/api/types'
+import { asGenerationRequest } from '@/api/types'
 import { IMAGE_EXPORT_MIB, IMAGE_IMPORT_MIB } from '@/config/constants'
 import { parseImageBackup, toImageBackup } from '@/domain/backup'
 import { useVideoApi } from '@/hooks/useVideoApi'
@@ -46,8 +47,9 @@ function legacyImages(projects: Project[], records: ReturnType<typeof useProject
   }
   for (const project of projects) for (const ref of project.references) add(project.id, ref)
   for (const record of records) {
-    for (const ref of record.request?.references || []) add(record.project_id, ref)
-    if (record.request?.image_url) add(record.project_id, { type: 'image', url: record.request.image_url })
+    const request = asGenerationRequest(record.request)
+    for (const ref of request?.references || []) add(record.project_id, ref)
+    if (request?.image_url) add(record.project_id, { type: 'image', url: request.image_url })
   }
   return out
 }

@@ -4,7 +4,18 @@ export const API_DOCS_URL =
   'https://docs.platform.letsur.ai/ai-gateway/api-reference/endpoints/video-generations'
 export const SEEDANCE_GUIDE_URL = 'https://docs.platform.letsur.ai/ai-gateway/model-guides/seedance'
 
-export const POLL_INTERVAL_MS = 5000
+export const ASSETS_PRICING_URL = 'https://platform.letsur.ai/services/ai-gateway?tab=Assets'
+
+/** 상태 조회는 10초에서 시작해 30초까지 늘립니다 (가이드 §5: 10~30초 간격). */
+export const POLL_INITIAL_MS = 10_000
+export const POLL_STEP_MS = 5_000
+export const POLL_MAX_MS = 30_000
+/** 이 시간이 지나면 자동 조회만 멈춥니다. 생성 실패로 단정하지 않습니다. */
+export const POLL_MAX_WAIT_MS = 20 * 60_000
+/** 연결 오류가 이 횟수만큼 이어지면 자동 조회를 멈춥니다. */
+export const POLL_TRANSPORT_FAILURES = 3
+
+export const PREVIEW_MAX_CANDIDATES = 4
 export const DEFAULT_REQUEST_TIMEOUT_MS = 60_000
 export const UPLOAD_TIMEOUT_MS = 180_000
 export const FRAME_DOWNLOAD_TIMEOUT_MS = 120_000
@@ -61,6 +72,7 @@ export const ROLES = {
 
 export const WORKSPACES = [
   { id: 'create', path: '/', label: '영상 만들기' },
+  { id: 'previews', path: '/previews', label: '시안 비교' },
   { id: 'project', path: '/project', label: '공통 설정' },
   { id: 'history', path: '/history', label: '생성 기록' },
   { id: 'images', path: '/library', label: '이미지 보관함' },

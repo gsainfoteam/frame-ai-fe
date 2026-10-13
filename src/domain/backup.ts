@@ -1,29 +1,42 @@
-import type {
-  ApiErrorInfo,
-  ImageAsset,
-  JobRecord,
-  JobStatus,
-  MediaBinding,
-  MediaReference,
-  Project,
-  ProjectBackup,
-  StoredMedia,
-  VideoGenerationRequest,
+import {
+  asGenerationRequest,
+  type ApiErrorInfo,
+  type FinalizeRequest,
+  type GenerationRequest,
+  type ImageAsset,
+  type JobRecord,
+  type JobStatus,
+  type MediaBinding,
+  type MediaReference,
+  type Project,
+  type ProjectBackup,
+  type StoredMedia,
+  type VideoGenerationRequest,
 } from '@/api/types'
 import { IMAGE_MIMES, PROJECT_NAME_MAX, isAllowedMime } from '@/config/constants'
 import { validRef } from '@/shared/lib/url'
+import { normalizeUsage } from '@/domain/usage'
 
 export function cleanRequest(value: unknown): VideoGenerationRequest | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null
   const p = value as Record<string, unknown>
-  const out: Partial<VideoGenerationRequest> = {}
+  if (typeof p.draft_job === 'string' && p.draft_job) {
+    const finalize: Record<string, unknown> = { model: typeof p.model === 'string' ? p.model : '', draft_job: p.draft_job }
+    if (p.resolution === '1080p') finalize.resolution = '1080p'
+    if (Number.isSafeInteger(p.seed)) finalize.seed = p.seed
+    for (const key of ['generate_audio', 'watermark', 'return_last_frame', 'store_media'] as const) {
+      if (typeof p[key] === 'boolean') finalize[key] = p[key]
+    }
+    return finalize as FinalizeRequest
+  }
+  const out: Partial<GenerationRequest> = {}
   for (const key of ['model', 'prompt', 'image_url', 'mode', 'resolution', 'aspect_ratio'] as const) {
     if (typeof p[key] === 'string') (out as Record<string, unknown>)[key] = p[key]
   }
   for (const key of ['duration', 'seed'] as const) {
     if (Number.isSafeInteger(p[key])) (out as Record<string, unknown>)[key] = p[key]
   }
-  for (const key of ['generate_audio', 'watermark', 'return_last_frame', 'store_media'] as const) {
+  for (const key of ['generate_audio', 'watermark', 'return_last_frame', 'store_media', 'draft'] as const) {
     if (typeof p[key] === 'boolean') (out as Record<string, unknown>)[key] = p[key]
   }
   if (Array.isArray(p.references)) {
@@ -38,7 +51,7 @@ export function cleanRequest(value: unknown): VideoGenerationRequest | null {
       })
       .filter((ref) => ['image', 'video', 'audio'].includes(ref.type) && typeof ref.url === 'string')
   }
-  return out as VideoGenerationRequest
+  return out as GenerationRequest
 }
 
 export function cleanRecord(record: unknown): JobRecord {
@@ -74,12 +87,12 @@ export function cleanRecord(record: unknown): JobRecord {
       .filter((b): b is MediaBinding => Number.isInteger(b.index) && b.index >= 0 && typeof b.media_id === 'string')
       .map((b) => ({ index: b.index, media_id: b.media_id }))
   }
+  const generation = asGenerationRequest(out.request)
   for (const binding of out.bindings) {
-    if (out.request?.references?.[binding.index]) out.request.references[binding.index].url = ''
+    if (generation?.references?.[binding.index]) generation.references[binding.index].url = ''
   }
-  if (r.usage && typeof r.usage.amount === 'string' && typeof r.usage.currency === 'string') {
-    out.usage = { amount: r.usage.amount, currency: r.usage.currency }
-  }
+  const usage = normalizeUsage(r.usage)
+  if (usage) out.usage = usage
   if (r.error && typeof r.error === 'object') {
     const error: ApiErrorInfo = {}
     for (const key of ['type', 'title', 'detail', 'vendor_code', 'message', 'code'] as const) {
@@ -95,7 +108,7 @@ export function cleanProject(value: unknown): Project {
   if (!p || typeof p.id !== 'string' || !p.id || typeof p.name !== 'string' || !p.name.trim()) {
     throw new Error('프로젝트 정보가 올바르지 않습니다.')
   }
-  const refs = cleanRequest({ references: Array.isArray(p.references) ? p.references : [] })?.references ?? []
+  const refs = asGenerationRequest(cleanRequest({ references: Array.isArray(p.references) ? p.references : [] }))?.references ?? []
   if (
     refs.length > 30 ||
     refs.some(

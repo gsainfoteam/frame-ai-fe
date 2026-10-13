@@ -12,6 +12,10 @@ import { useProjectStore } from '@/stores/projectStore'
 import { toast } from '@/stores/toastStore'
 import { loadWorkspaceForProject } from '@/features/create/draft'
 import { useJob } from '@/features/create/jobContext'
+import { isFinalizeRequest } from '@/api/types'
+import { isPreviewRecord, sourceRequest } from '@/domain/seedance'
+import { formatAmount, formatUsage, sumUsage } from '@/domain/usage'
+import { useWorkspaceStore } from '@/stores/workspaceStore'
 
 const statusText = {
   queued: '대기',
@@ -31,6 +35,7 @@ export function HistoryPage() {
   const replaceFromBackup = useProjectStore((s) => s.replaceFromBackup)
   const deleteRecord = useProjectStore((s) => s.deleteRecord)
   const moveRecord = useProjectStore((s) => s.moveRecord)
+  const setWorkspace = useWorkspaceStore((s) => s.set)
   const current = projects.find((p) => p.id === activeProjectId)
   const items = records
     .filter((record) => record.project_id === activeProjectId)
@@ -83,24 +88,42 @@ export function HistoryPage() {
           {items.map((record) => {
             const date = new Date(record.created_at)
             const videos = record.media.filter((m) => m.kind === 'video' && m.state === 'ready')
+            const preview = isPreviewRecord(record)
+            const draftJob = isFinalizeRequest(record.request) ? record.request.draft_job : null
+            const source = sourceRequest(record, records)
+            const total = draftJob ? sumUsage([records.find((item) => item.id === draftJob)?.usage, record.usage]) : null
             return (
               <li key={record.id} className="rounded-md border border-line bg-surface p-3">
                 <div className="flex items-start justify-between gap-3">
                   <p className="line-clamp-2 min-w-0 whitespace-pre-wrap break-words text-sm font-medium">
-                    {record.request?.prompt || '이전 작업 (설정 정보 없음)'}
+                    {preview || draftJob ? (
+                      <span className="mr-1.5 rounded-full bg-accent-soft px-2 py-0.5 align-middle text-2xs font-medium text-accent">
+                        {preview ? '480p 시안' : '1080p 확정'}
+                      </span>
+                    ) : null}
+                    {source?.prompt || (draftJob ? '원본 시안 기록 없음' : '이전 작업 (설정 정보 없음)')}
                   </p>
                   <StatusBadge status={record.status}>{statusText[record.status]}</StatusBadge>
                 </div>
                 <p className="mt-1 text-xs text-muted">
                   {(Number.isNaN(date.getTime()) ? record.created_at : date.toLocaleString('ko-KR')) +
-                    (record.usage ? ` · ${record.usage.amount} ${record.usage.currency}` : '')}
+                    (record.usage ? ` · ${formatUsage(record.usage)}` : '') +
+                    (total ? ` · 시안 포함 ${formatAmount(total.amount, total.currency)}` : '')}
                 </p>
-                <p className="mt-0.5 break-all font-mono text-2xs text-faint">{record.id}</p>
+                <p className="mt-0.5 break-all font-mono text-2xs text-faint">
+                  {record.id}
+                  {draftJob ? ` ← 시안 ${draftJob}` : ''}
+                </p>
                 <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
                   <Button size="sm" onClick={() => startPolling(record.id)}>
                     결과 / 상태 조회
                   </Button>
-                  {record.request ? (
+                  {preview && record.status === 'succeeded' ? (
+                    <Button size="sm" variant="primary" onClick={() => setWorkspace({ finalizeTarget: record.id })}>
+                      1080p로 확정
+                    </Button>
+                  ) : null}
+                  {source ? (
                     <Button size="sm" onClick={() => restoreRequest(record.id)}>
                       설정 불러오기
                     </Button>

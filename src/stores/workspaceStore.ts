@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { MediaKind, ResultMedia } from '@/api/types'
+import type { MediaKind, ResultMedia, VideoGenerationRequest } from '@/api/types'
 import { ROLES } from '@/config/constants'
 import { createId } from '@/shared/lib/id'
 
@@ -12,6 +12,8 @@ export type ReferenceDraft = {
   mediaId?: string
   status: string
   file?: File | null
+  /** 브라우저에서 읽은 영상·오디오 길이(초). 입력 조건 경고용 */
+  durationSec?: number
 }
 
 export type PreviewMedia = {
@@ -19,6 +21,20 @@ export type PreviewMedia = {
   kind: string
   mediaId: string
 }
+
+/** 접수 여부를 알 수 없거나 거절된 제출. 담당자 문의용 정보로 사용합니다 (API 키 제외). */
+export type SubmissionFailure = {
+  at: string
+  endpoint: string
+  body: VideoGenerationRequest
+  status?: number
+  code?: string
+  /** 공통 오류 형식의 error_ref */
+  ref?: string
+  message: string
+}
+
+export type GenerationKind = 'direct' | 'preview'
 
 export type ContinuationSession = {
   jobId: string
@@ -38,6 +54,8 @@ type WorkspaceState = {
   sharedReferences: ReferenceDraft[]
   refOpen: boolean
   mode: string
+  generation: GenerationKind
+  previewCount: number
   duration: string
   customDuration: number
   resolution: string
@@ -59,6 +77,11 @@ type WorkspaceState = {
   preview: PreviewMedia | null
   polling: boolean
   continuation: ContinuationSession | null
+  /** 1080p 확정 대화상자를 열 시안의 작업 ID */
+  finalizeTarget: string | null
+  /** `queue_full` 응답을 받은 시각과 Retry-After가 끝나는 시각(ms) */
+  submitBlock: { at: number; until: number } | null
+  lastSubmission: SubmissionFailure | null
   set: (patch: Partial<WorkspaceState>) => void
   resetScene: () => void
   addReference: (initial?: Partial<ReferenceDraft>) => string
@@ -90,7 +113,7 @@ export const emptyWorkspaceResult = {
   jobId: '',
   status: '준비',
   cost: '비용 미확정',
-  notice: '생성 요청이 접수되면 5초 간격으로 진행 상태를 확인합니다.',
+  notice: '생성 요청이 접수되면 10~30초 간격으로 진행 상태를 확인합니다.',
   noticeError: false,
   rawResponse: '아직 응답이 없습니다.',
   media: [] as ResultMedia[],
@@ -109,11 +132,14 @@ export function newReference(initial?: Partial<ReferenceDraft>): ReferenceDraft 
     mediaId: initial?.mediaId,
     status: initial?.status ?? '',
     file: initial?.file ?? null,
+    durationSec: initial?.durationSec,
   }
 }
 
 export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   ...sceneDefaults,
+  generation: 'direct' as GenerationKind,
+  previewCount: 1,
   duration: '',
   customDuration: 8,
   resolution: '480p',
@@ -127,6 +153,9 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   uploads: 0,
   polling: false,
   continuation: null,
+  finalizeTarget: null,
+  submitBlock: null,
+  lastSubmission: null,
   ...emptyWorkspaceResult,
   set: (patch) => set(patch),
   resetScene: () =>
