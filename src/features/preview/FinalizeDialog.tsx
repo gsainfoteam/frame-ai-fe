@@ -124,7 +124,7 @@ function FinalizeBody({ draftJobId }: { draftJobId: string }) {
           <Field label="결과 보관" className="sm:col-span-2">
             <Select value={options.store} onChange={(e) => update({ store: e.target.value })}>
               <option value="">스페이스 설정 따르기</option>
-              <option value="false">임시 보관 · 준비되면 바로 내려받기</option>
+              <option value="false">임시 보관 · 약 1시간, 준비되면 바로 내려받기</option>
               <option value="true">결과 보관</option>
             </Select>
           </Field>

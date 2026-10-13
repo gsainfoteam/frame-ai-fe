@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import type { GetJobResponse, JobStatus, LetsurJob } from '@/api/types'
-import { LetsurApiError, isQueueFull, isTransportError } from '@/api/errors'
+import { LetsurApiError, isRetryableRateLimit, isTransportError } from '@/api/errors'
 import { createLetsurClient } from '@/api/letsur/client'
 import { POLL_MAX_WAIT_MS, POLL_TRANSPORT_FAILURES } from '@/config/constants'
 import { nextPollDelay, settleJob } from '@/domain/polling'
@@ -151,7 +151,8 @@ async function poll(id: string, epoch: number, attempt: number, transportFailure
   } catch (error) {
     if (epochs.get(id) !== epoch) return
     const err = error instanceof LetsurApiError ? error : new LetsurApiError((error as Error).message || '조회 실패')
-    if (isQueueFull(err) || err.status === 503) {
+    // 503(result_unavailable 등)과 재시도 가능한 429는 안내된 시간 뒤 같은 작업을 다시 조회합니다.
+    if (isRetryableRateLimit(err) || err.status === 503) {
       const delay = err.retry ?? nextPollDelay(attempt)
       const nextAt = schedule(delay, attempt, 0)
       emit(
@@ -165,7 +166,9 @@ async function poll(id: string, epoch: number, attempt: number, transportFailure
       )
       return
     }
-    if (isTransportError(err) && transportFailures + 1 < POLL_TRANSPORT_FAILURES) {
+    // 연결 실패와 502·504는 간격을 늘려 제한적으로 재시도합니다 (렛서 오류 처리 문서).
+    const transient = isTransportError(err) || err.status === 502 || err.status === 504
+    if (transient && transportFailures + 1 < POLL_TRANSPORT_FAILURES) {
       const delay = nextPollDelay(attempt)
       const nextAt = schedule(delay, attempt + 1, transportFailures + 1)
       emit(
@@ -184,7 +187,7 @@ async function poll(id: string, epoch: number, attempt: number, transportFailure
         phase: 'error',
         nextAt: undefined,
         messageIsError: true,
-        message: isTransportError(err)
+        message: transient
           ? `상태 조회가 계속 실패해 자동 조회를 멈췄습니다. 생성 실패로 간주하지 말고 같은 작업 ID로 다시 조회하세요.\n${err.message}`
           : err.message,
       }),

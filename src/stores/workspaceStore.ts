@@ -25,9 +25,12 @@ export type PreviewMedia = {
 /** 접수 여부를 알 수 없거나 거절된 제출. 담당자 문의용 정보로 사용합니다 (API 키 제외). */
 export type SubmissionFailure = {
   at: string
+  endpoint: string
   body: VideoGenerationRequest
   status?: number
   code?: string
+  /** 공통 오류 형식의 error_ref */
+  ref?: string
   message: string
 }
 

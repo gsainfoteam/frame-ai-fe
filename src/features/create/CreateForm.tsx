@@ -288,7 +288,7 @@ export function GenerationSettings() {
           <Field label="결과 보관">
             <Select value={store} onChange={(e) => set({ store: e.target.value })}>
               <option value="">스페이스 설정 따르기</option>
-              <option value="false">임시 보관</option>
+              <option value="false">임시 보관 · 약 1시간</option>
               <option value="true">결과 보관</option>
             </Select>
           </Field>

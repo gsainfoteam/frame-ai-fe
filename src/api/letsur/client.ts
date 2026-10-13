@@ -7,7 +7,7 @@ import type {
   UploadTrack,
   VideoGenerationRequest,
 } from '@/api/types'
-import { LetsurApiError, extractErrorCode, parseRetryAfter } from '@/api/errors'
+import { LetsurApiError, extractErrorCode, extractErrorRef, parseRetryAfter } from '@/api/errors'
 import { DEFAULT_REQUEST_TIMEOUT_MS, FRAME_DOWNLOAD_TIMEOUT_MS, IMAGE_MIMES, UPLOAD_TIMEOUT_MS, isAllowedMime } from '@/config/constants'
 import { letsurApiBase } from '@/config/env'
 import { describeError, httpHint } from '@/domain/errors'
@@ -54,6 +54,7 @@ export function createLetsurClient(getKey: () => string): VideoApi {
           {
             status: res.status,
             code,
+            ref: extractErrorRef(json),
             retry: parseRetryAfter(res.headers.get('Retry-After')),
             payload: json,
           },

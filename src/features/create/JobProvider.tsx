@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, type ReactNode } from 'react'
 import { useNavigate } from 'react-router'
 import type { GenerationRequest, MediaBinding, ResultMedia, VideoGenerationRequest } from '@/api/types'
 import { asGenerationRequest, isFinalizeRequest } from '@/api/types'
-import { LetsurApiError, isMediaNotReady, isQueueFull } from '@/api/errors'
+import { LetsurApiError, isMediaNotReady, isRetryableRateLimit } from '@/api/errors'
 import { IMAGE_MIMES, PREVIEW_MAX_CANDIDATES, REF_LIMITS, isAllowedMime } from '@/config/constants'
 import { describeError } from '@/domain/errors'
 import { estimateGeneration, formatEstimate } from '@/domain/pricing'
@@ -45,6 +45,9 @@ const statusLabel: Record<string, string> = {
   failed: '실패',
 }
 
+/** Retry-After 없이 재시도 가능한 429를 받았을 때 기다릴 시간 */
+const RATE_LIMIT_FALLBACK_MS = 10_000
+
 function findRecord(id: string) {
   return useProjectStore.getState().records.find((item) => item.id === id)
 }
@@ -52,10 +55,10 @@ function findRecord(id: string) {
 /** 접수됐는지 확인할 수 없는 실패인지, 거절이 확정된 실패인지 구분합니다 (가이드 §8 재시도 판단). */
 function classifySubmitError(err: LetsurApiError) {
   if (err.status === 400) return { status: '입력 거절', extra: '\n요청은 접수되지 않았습니다. 입력을 수정한 뒤 다시 요청해주세요.' }
-  if (isQueueFull(err)) {
+  if (isRetryableRateLimit(err)) {
     return {
-      status: '대기열 가득 참',
-      extra: `\n요청은 접수되지 않았습니다. ${Math.round((err.retry ?? 5000) / 1000)}초 뒤 다시 요청할 수 있습니다.`,
+      status: err.code === 'rate_limit_exceeded' ? '요청 간격 제한' : '대기열 가득 참',
+      extra: `\n요청은 접수되지 않았습니다. ${Math.round((err.retry ?? RATE_LIMIT_FALLBACK_MS) / 1000)}초 뒤 다시 요청할 수 있습니다.`,
     }
   }
   if (err.status !== undefined && err.status >= 400 && err.status < 500) {
@@ -217,8 +220,18 @@ export function JobProvider({ children }: { children: ReactNode }) {
       } catch (error) {
         const err = error instanceof LetsurApiError ? error : new LetsurApiError((error as Error).message)
         useWorkspaceStore.getState().set({
-          lastSubmission: { at, body: payload, status: err.status, code: err.code, message: err.message },
-          ...(isQueueFull(err) ? { submitBlock: { at: Date.now(), until: Date.now() + (err.retry ?? 5000) } } : {}),
+          lastSubmission: {
+            at,
+            endpoint: 'POST /v1/video/generations',
+            body: payload,
+            status: err.status,
+            code: err.code,
+            ref: err.ref,
+            message: err.message,
+          },
+          ...(isRetryableRateLimit(err)
+            ? { submitBlock: { at: Date.now(), until: Date.now() + (err.retry ?? RATE_LIMIT_FALLBACK_MS) } }
+            : {}),
         })
         throw err
       }
@@ -292,8 +305,13 @@ export function JobProvider({ children }: { children: ReactNode }) {
           )
       } else {
         const { status, extra } = classifySubmitError(err)
+        // 공개 API 문서에는 아직 draft 필드가 없어, 스페이스에 시안 기능이 열리지 않았다면 400이 날 수 있습니다.
+        const previewNote =
+          payload.draft && err.status === 400
+            ? '\n시안(draft) 기능이 이 스페이스에 아직 열리지 않았을 수 있습니다. 바로 생성으로 바꾸거나 렛서에 이용 가능 여부를 확인하세요.'
+            : ''
         if (!accepted.length) useWorkspaceStore.getState().set({ status })
-        useWorkspaceStore.getState().setNotice(partial + err.message + extra, true)
+        useWorkspaceStore.getState().setNotice(partial + err.message + extra + previewNote, true)
       }
       toast(err.message.split('\n')[0], true)
     } finally {
@@ -331,6 +349,7 @@ export function JobProvider({ children }: { children: ReactNode }) {
           throw new LetsurApiError(err.message + classifySubmitError(err).extra, {
             status: err.status,
             code: err.code,
+            ref: err.ref,
             payload: err.payload,
           })
         }
