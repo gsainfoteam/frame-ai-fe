@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router'
-import { ASSETS_PRICING_URL, PREVIEW_MAX_CANDIDATES } from '@/config/constants'
-import { PRICING_AS_OF, estimateGeneration, formatEstimate } from '@/domain/pricing'
+import { PREVIEW_MAX_CANDIDATES } from '@/config/constants'
 import { totalVideoWarning } from '@/domain/inputChecks'
 import { cn } from '@/shared/lib/cn'
 import { buildPayload, inputHint, validateDraftInputs, validatePayload } from '@/domain/seedance'
@@ -15,6 +14,7 @@ import { useWorkspaceStore } from '@/stores/workspaceStore'
 import { useProjectStore } from '@/stores/projectStore'
 import { currentDraft } from '@/features/create/draft'
 import { ReferenceCard } from '@/features/create/ReferenceEditor'
+import { CostEstimate } from '@/features/create/CostEstimate'
 import { downloadJson } from '@/shared/lib/download'
 
 export function SceneForm() {
@@ -266,6 +266,8 @@ export function GenerationSettings() {
         </Field>
       </div>
 
+      <CostEstimate />
+
       <Disclosure className="mt-4" label="고급 설정" meta="시드 · 워터마크 · 결과 보관">
         <div className="grid gap-x-4 gap-y-3 sm:grid-cols-2">
           <Field label="시드 (선택)" hint="같은 시드가 같은 결과를 보장하지는 않습니다.">
@@ -341,7 +343,6 @@ export function GenerateBar() {
   )
   const lengthWarning = totalVideoWarning(videoSeconds)
   const count = generation === 'preview' ? previewCount : 1
-  const estimate = estimateGeneration(payload)
   const label =
     generation === 'preview' ? (count > 1 ? `480p 시안 ${count}개 만들기 ↗` : '480p 시안 만들기 ↗') : '영상 생성 ↗'
 
@@ -369,16 +370,6 @@ export function GenerateBar() {
         <Button variant="primary" size="lg" type="submit" block disabled={submitting || uploads > 0 || blockedFor > 0}>
           {submitting ? '접수 중…' : uploads > 0 ? '업로드 중…' : blockedFor > 0 ? `대기열 가득 참 · ${blockedFor}초 뒤 다시 요청` : label}
         </Button>
-        <p className="mt-1.5 text-center text-xs text-faint">
-          {estimate.ok
-            ? `예상 ${formatEstimate(estimate.cost * count)}${count > 1 ? ` (${count} × ${formatEstimate(estimate.cost)})` : ''} · ${estimate.resolution} ${estimate.duration}초`
-            : estimate.reason}
-          {estimate.ok && estimate.notes.length ? ` · ${estimate.notes.join(' ')}` : ''}
-          {' · '}단가 {PRICING_AS_OF} 기준·변동 가능 · 실제 청구액은 완료 후 확인{' '}
-          <a href={ASSETS_PRICING_URL} target="_blank" rel="noopener noreferrer">
-            최신 단가 ↗
-          </a>
-        </p>
       </div>
     </div>
   )

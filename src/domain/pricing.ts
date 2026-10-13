@@ -25,7 +25,16 @@ const TOKENS_PER_FRAME_UNIT: Record<Resolution, number> = {
 export const DEFAULT_DURATION = 5
 
 export type Estimate =
-  | { ok: true; tokens: number; cost: number; resolution: Resolution; duration: number; notes: string[] }
+  | {
+      ok: true
+      tokens: number
+      cost: number
+      /** 적용 단가 (unit / 100만 영상 토큰) */
+      pricePerMillion: number
+      resolution: Resolution
+      duration: number
+      notes: string[]
+    }
   | { ok: false; reason: string }
 
 export function estimateTokens(resolution: Resolution, duration: number) {
@@ -34,7 +43,8 @@ export function estimateTokens(resolution: Resolution, duration: number) {
 
 function estimate(resolution: Resolution, duration: number, notes: string[]): Estimate {
   const tokens = estimateTokens(resolution, duration)
-  return { ok: true, tokens, cost: (tokens / 1_000_000) * PRICE_PER_MILLION.none[resolution], resolution, duration, notes }
+  const pricePerMillion = PRICE_PER_MILLION.none[resolution]
+  return { ok: true, tokens, cost: (tokens / 1_000_000) * pricePerMillion, pricePerMillion, resolution, duration, notes }
 }
 
 function framed(payload: GenerationRequest) {
