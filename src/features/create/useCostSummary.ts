@@ -13,9 +13,10 @@ export function useCostSummary() {
   const previewCount = useWorkspaceStore((s) => s.previewCount)
   const preview = generation === 'preview'
   const count = preview ? previewCount : 1
-  const payload = buildPayload(currentDraft())
-  const estimate = estimateGeneration(payload)
+  const draft = currentDraft()
+  const payload = buildPayload(draft)
+  const estimate = estimateGeneration(payload, draft.spec)
   const finalize = preview ? estimateFinalize(payload) : null
-  const total = estimate.ok ? formatEstimate(estimate.cost * count) : null
-  return { preview, count, estimate, finalize, total }
+  const total = estimate.ok ? formatEstimate(estimate.cost * count, estimate.currency) : null
+  return { preview, count, estimate, finalize, total, spec: draft.spec }
 }

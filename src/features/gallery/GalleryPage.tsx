@@ -4,7 +4,7 @@ import type { ImageAsset, MediaReference, Project } from '@/api/types'
 import { asGenerationRequest } from '@/api/types'
 import { IMAGE_EXPORT_MIB, IMAGE_IMPORT_MIB } from '@/config/constants'
 import { parseImageBackup, toImageBackup } from '@/domain/backup'
-import { useVideoApi } from '@/hooks/useVideoApi'
+import { useGateway, useVideoApi } from '@/hooks/useVideoApi'
 import { downloadBlob, downloadJson } from '@/shared/lib/download'
 import { dimensionLabel } from '@/shared/lib/image'
 import { validRef } from '@/shared/lib/url'
@@ -56,6 +56,7 @@ function legacyImages(projects: Project[], records: ReturnType<typeof useProject
 
 export function GalleryPage() {
   const api = useVideoApi()
+  const caps = useGateway().capabilities
   const projects = useProjectStore((s) => s.projects)
   const records = useProjectStore((s) => s.records)
   const activeProjectId = useProjectStore((s) => s.activeProjectId)
@@ -186,6 +187,7 @@ export function GalleryPage() {
                 bumpUploads(1)
                 try {
                   const file = new File([asset.blob], asset.name, { type: asset.type })
+                  if (!caps.managedUpload) track = 'file'
                   const result = await api.uploadReference(file, track)
                   if (!result.reference || !validRef(result.reference)) throw new Error('유효한 업로드 참조를 받지 못했습니다.')
                   await rememberImage(file, result.reference, track, asset.project_id, asset.name)
@@ -220,6 +222,7 @@ function GalleryCard({
   onReload: () => void
   onReupload: (track: 'file' | 'managed') => Promise<void>
 }) {
+  const gateway = useGateway()
   const [track, setTrack] = useState<'file' | 'managed'>(asset.track)
   const [dims, setDims] = useState('')
   const tryAttach = (target: 'scene' | 'shared') => {
@@ -273,18 +276,20 @@ function GalleryCard({
         {asset.blob ? (
           <>
             <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-              <Select
-                aria-label="다시 업로드할 방식"
-                containerClassName="w-auto"
-                className="h-8 text-sm"
-                value={track}
-                onChange={(e) => setTrack(e.target.value as 'file' | 'managed')}
-              >
-                <option value="file">일반 업로드</option>
-                <option value="managed">관리형 · 인물</option>
-              </Select>
+              {gateway.capabilities.managedUpload ? (
+                <Select
+                  aria-label="다시 업로드할 방식"
+                  containerClassName="w-auto"
+                  className="h-8 text-sm"
+                  value={track}
+                  onChange={(e) => setTrack(e.target.value as 'file' | 'managed')}
+                >
+                  <option value="file">일반 업로드</option>
+                  <option value="managed">관리형 · 인물</option>
+                </Select>
+              ) : null}
               <Button size="sm" onClick={() => void onReupload(track).catch((error: Error) => toast(error.message, true))}>
-                다시 업로드
+                {gateway.capabilities.mediaUpload ? '다시 업로드' : `${gateway.label}용 참조 만들기`}
               </Button>
             </div>
             <div className="mt-auto flex flex-wrap items-center gap-1.5 pt-2.5">
@@ -295,7 +300,7 @@ function GalleryCard({
                 size="sm"
                 variant="subtle"
                 onClick={async () => {
-                  if (!confirm('브라우저에 보관한 이 원본을 삭제할까요? 프로젝트 참조와 렛서의 파일은 유지됩니다.')) return
+                  if (!confirm('브라우저에 보관한 이 원본을 삭제할까요? 프로젝트 참조와 게이트웨이에 올린 파일은 유지됩니다.')) return
                   await imageRepository.delete(asset.id)
                   onReload()
                 }}

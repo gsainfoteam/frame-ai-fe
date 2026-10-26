@@ -1,91 +1,47 @@
 import type { VideoApi } from '@/api/videoApi'
+import { isFinalizeRequest } from '@/api/types'
 import type {
   CreateJobResponse,
-  GetJobResponse,
+  GatewayJob,
   MediaLinkResponse,
   UploadReferenceResponse,
   UploadTrack,
   VideoGenerationRequest,
 } from '@/api/types'
-import { LetsurApiError, extractErrorCode, extractErrorRef, parseRetryAfter } from '@/api/errors'
-import { DEFAULT_REQUEST_TIMEOUT_MS, FRAME_DOWNLOAD_TIMEOUT_MS, IMAGE_MIMES, UPLOAD_TIMEOUT_MS, isAllowedMime } from '@/config/constants'
+import { GatewayApiError } from '@/api/errors'
+import { createRequester } from '@/api/http'
+import { isKlingModel, toKlingBody } from '@/api/letsur/kling'
+import { FRAME_DOWNLOAD_TIMEOUT_MS, IMAGE_MIMES, UPLOAD_TIMEOUT_MS, isAllowedMime } from '@/config/constants'
 import { letsurApiBase } from '@/config/env'
-import { describeError, httpHint } from '@/domain/errors'
+import { httpHint } from '@/domain/errors'
+
+type GetJobResponse = {
+  data?: { job?: GatewayJob }
+}
 
 export function createLetsurClient(getKey: () => string): VideoApi {
-  async function request<T>(path: string, options: RequestInit & { timeout?: number } = {}): Promise<T> {
-    const key = getKey().trim()
-    if (!key) throw new LetsurApiError('API 키를 입력해주세요.', { code: 'missing_api_key' })
-
-    const timeout = options.timeout ?? DEFAULT_REQUEST_TIMEOUT_MS
-    const controller = new AbortController()
-    const timer = setTimeout(() => controller.abort(), timeout)
-
-    try {
-      const headers = new Headers(options.headers)
-      headers.set('Authorization', `Bearer ${key}`)
-      if (typeof options.body === 'string') headers.set('Content-Type', 'application/json')
-
-      const res = await fetch(`${letsurApiBase}${path}`, {
-        ...options,
-        headers,
-        signal: controller.signal,
-        credentials: 'omit',
-        redirect: 'error',
-      })
-      const raw = await res.text()
-      let json: unknown
-      try {
-        json = JSON.parse(raw)
-      } catch {
-        const hint = res.ok ? '' : httpHint(res.status, undefined, raw)
-        throw new LetsurApiError(`응답을 해석할 수 없습니다 (HTTP ${res.status}).${hint ? `\n${hint}` : ''}`, {
-          status: res.status,
-          retry: parseRetryAfter(res.headers.get('Retry-After')),
-        })
-      }
-
-      if (!res.ok) {
-        const payload = json as { error?: unknown }
-        const code = extractErrorCode(json)
-        const hint = httpHint(res.status, code, raw)
-        throw new LetsurApiError(
-          `HTTP ${res.status} · ${describeError(payload.error ?? json)}${hint ? `\n${hint}` : ''}`,
-          {
-            status: res.status,
-            code,
-            ref: extractErrorRef(json),
-            retry: parseRetryAfter(res.headers.get('Retry-After')),
-            payload: json,
-          },
-        )
-      }
-      return json as T
-    } catch (error) {
-      if (error instanceof LetsurApiError) throw error
-      if (error instanceof DOMException && error.name === 'AbortError') {
-        throw new LetsurApiError('응답 대기 시간이 초과되었습니다. 생성 요청은 접수되었을 수 있습니다.')
-      }
-      if (error instanceof TypeError) {
-        throw new LetsurApiError(
-          '연결에 실패했습니다. 네트워크 또는 브라우저 교차 출처 제한을 확인하세요. 생성 요청은 접수되었을 수 있습니다.',
-        )
-      }
-      throw error
-    } finally {
-      clearTimeout(timer)
-    }
-  }
+  const request = createRequester({ gateway: 'letsur', base: letsurApiBase, getKey, hint: httpHint })
 
   return {
+    gateway: 'letsur',
     async createJob(payload: VideoGenerationRequest) {
-      return request<CreateJobResponse>('/video/generations', {
+      const kling = !isFinalizeRequest(payload) && isKlingModel(payload.model)
+      const res = await request<CreateJobResponse & { Response?: { TaskId?: string } }>('/video/generations', {
         method: 'POST',
-        body: JSON.stringify(payload),
+        body: JSON.stringify(kling ? toKlingBody(payload) : payload),
       })
+      // 작업 ID 위치가 모델마다 다릅니다: Seedance는 `id`, Kling은 `Response.TaskId`.
+      return { ...res, id: res.id ?? res.Response?.TaskId }
+    },
+    async listModelIds() {
+      const res = await request<{ data?: Array<{ id?: string }> }>('/models')
+      return (res.data ?? []).flatMap((item) => (typeof item.id === 'string' ? [item.id] : []))
     },
     async getJob(id: string) {
-      return request<GetJobResponse>(`/jobs/${encodeURIComponent(id)}`)
+      const raw = await request<GetJobResponse>(`/jobs/${encodeURIComponent(id)}`)
+      const job = raw.data?.job
+      if (!job) throw new GatewayApiError('응답에서 작업 정보를 찾지 못했습니다.', { code: 'missing_job', payload: raw })
+      return { job, raw }
     },
     async uploadReference(file: File, track: UploadTrack) {
       const form = new FormData()
@@ -100,7 +56,7 @@ export function createLetsurClient(getKey: () => string): VideoApi {
     },
     async downloadMedia(mediaId: string) {
       const key = getKey().trim()
-      if (!key) throw new LetsurApiError('API 키를 입력해주세요.')
+      if (!key) throw new GatewayApiError('API 키를 입력해주세요.')
       const controller = new AbortController()
       const timer = setTimeout(() => controller.abort(), FRAME_DOWNLOAD_TIMEOUT_MS)
       try {
@@ -117,20 +73,20 @@ export function createLetsurClient(getKey: () => string): VideoApi {
           } catch {
             /* ignore parse */
           }
-          throw new LetsurApiError(detail)
+          throw new GatewayApiError(detail)
         }
         const blob = await res.blob()
         if (!isAllowedMime(IMAGE_MIMES, blob.type) || blob.size > 30 * 1024 * 1024 || !blob.size) {
-          throw new LetsurApiError('참조로 사용할 수 없는 이미지 형식 또는 크기입니다.')
+          throw new GatewayApiError('참조로 사용할 수 없는 이미지 형식 또는 크기입니다.')
         }
         return blob
       } catch (error) {
-        if (error instanceof LetsurApiError) throw error
+        if (error instanceof GatewayApiError) throw error
         if (error instanceof DOMException && error.name === 'AbortError') {
-          throw new LetsurApiError('이미지 다운로드 시간이 초과되었습니다. 새 생성은 요청하지 않았습니다.')
+          throw new GatewayApiError('이미지 다운로드 시간이 초과되었습니다. 새 생성은 요청하지 않았습니다.')
         }
         if (error instanceof TypeError) {
-          throw new LetsurApiError(
+          throw new GatewayApiError(
             '로컬 도구에 연결할 수 없습니다. 실행 상태를 확인하거나 아래 파일 선택 방식으로 진행해주세요.',
           )
         }

@@ -2,9 +2,12 @@ import { useCallback, useEffect, useMemo, type ReactNode } from 'react'
 import { useNavigate } from 'react-router'
 import type { GenerationRequest, MediaBinding, ResultMedia, VideoGenerationRequest } from '@/api/types'
 import { asGenerationRequest, isFinalizeRequest } from '@/api/types'
-import { LetsurApiError, isMediaNotReady, isRetryableRateLimit } from '@/api/errors'
+import { GatewayApiError, isMediaNotReady, isRetryableRateLimit } from '@/api/errors'
+import { currentVideoApi, videoApiForMedia } from '@/api'
+import { GATEWAYS } from '@/api/gateway'
 import { IMAGE_MIMES, PREVIEW_MAX_CANDIDATES, REF_LIMITS, isAllowedMime } from '@/config/constants'
 import { describeError } from '@/domain/errors'
+import { capabilitiesFor, modelCapabilities, type ModelSpec } from '@/domain/models'
 import { estimateGeneration, formatEstimate } from '@/domain/pricing'
 import {
   buildFinalizePayload,
@@ -18,22 +21,23 @@ import {
   type FinalizeOptions,
 } from '@/domain/seedance'
 import { formatUsage } from '@/domain/usage'
-import { useVideoApi } from '@/hooks/useVideoApi'
-import { validRef, safeUrl } from '@/shared/lib/url'
+import { playableUrl, safeUrl, validRef } from '@/shared/lib/url'
 import { rememberImage } from '@/storage/imageRepository'
 import { useProjectStore } from '@/stores/projectStore'
 import { useSessionStore } from '@/stores/sessionStore'
 import { toast } from '@/stores/toastStore'
 import { useWorkspaceStore } from '@/stores/workspaceStore'
-import { currentDraft } from '@/features/create/draft'
+import { currentDraft, currentModel } from '@/features/create/draft'
 import { JobContext } from '@/features/create/jobContext'
 import {
   fetchJobOnce,
+  gatewayOfJob,
   isWatchActive,
   onJobWatch,
   rememberJob,
   stopWatching,
   useJobWatchStore,
+  videoApiForJob,
   watchJob,
   type JobWatch,
 } from '@/features/jobs/jobWatcher'
@@ -53,7 +57,7 @@ function findRecord(id: string) {
 }
 
 /** 접수됐는지 확인할 수 없는 실패인지, 거절이 확정된 실패인지 구분합니다 (가이드 §8 재시도 판단). */
-function classifySubmitError(err: LetsurApiError) {
+function classifySubmitError(err: GatewayApiError) {
   if (err.status === 400) return { status: '입력 거절', extra: '\n요청은 접수되지 않았습니다. 입력을 수정한 뒤 다시 요청해주세요.' }
   if (isRetryableRateLimit(err)) {
     return {
@@ -67,12 +71,25 @@ function classifySubmitError(err: LetsurApiError) {
   return {
     status: '접수 확인 필요',
     extra:
-      '\n접수 여부를 알 수 없습니다. 다시 보내면 중복 생성·과금될 수 있어 자동 재전송하지 않습니다. 요청 시각과 모델명으로 렛서 담당자에게 접수 여부를 확인하세요(‘문의용 정보 복사’).',
+      err.gateway === 'openrouter' || (!err.gateway && useSessionStore.getState().gateway === 'openrouter')
+        ? '\n접수 여부를 알 수 없습니다. 다시 보내면 중복 생성·과금될 수 있어 자동 재전송하지 않습니다. OpenRouter 활동 기록(Activity)에서 접수 여부를 확인하세요.'
+        : '\n접수 여부를 알 수 없습니다. 다시 보내면 중복 생성·과금될 수 있어 자동 재전송하지 않습니다. 요청 시각과 모델명으로 렛서 담당자에게 접수 여부를 확인하세요(‘문의용 정보 복사’).',
   }
 }
 
+/** 이전 결과 영상을 참조로 다시 보내려면 게이트웨이가 공개 HTTPS 링크를 줘야 합니다. */
+async function shareableVideoUrl(mediaId: string) {
+  const link = await videoApiForMedia(mediaId).issueMediaLink(mediaId)
+  const url = safeUrl(link.url ?? '')
+  if (url) return url
+  throw new Error(
+    link.url?.startsWith('blob:')
+      ? 'OpenRouter가 이 결과의 공개 링크를 주지 않아 영상 참조로 보낼 수 없습니다. 영상을 내려받아 HTTPS로 올린 뒤 URL을 입력해주세요.'
+      : '이전 영상의 링크 발급에 실패했습니다.',
+  )
+}
+
 export function JobProvider({ children }: { children: ReactNode }) {
-  const api = useVideoApi()
   const navigate = useNavigate()
 
   const showMedia = useCallback((url: string, kind: string, mediaId = '') => {
@@ -93,7 +110,7 @@ export function JobProvider({ children }: { children: ReactNode }) {
         patch.media = job.result?.media ?? []
         if (job.status === 'succeeded') {
           const readyVideo = patch.media.find((item) => item.kind === 'video' && item.state === 'ready' && item.url)
-          const safe = readyVideo?.url ? safeUrl(readyVideo.url) : null
+          const safe = readyVideo?.url ? playableUrl(readyVideo.url) : null
           if (safe && readyVideo && workspace.preview?.mediaId !== readyVideo.media_id) {
             patch.preview = { url: safe, kind: readyVideo.kind, mediaId: readyVideo.media_id }
           }
@@ -186,28 +203,29 @@ export function JobProvider({ children }: { children: ReactNode }) {
       const next = { ...payload, references: payload.references ? [...payload.references] : undefined }
       const bindings = captureBindings(currentDraft())
       for (const binding of bindings) {
-        const link = await api.issueMediaLink(binding.media_id)
-        if (!safeUrl(link.url ?? '')) throw new Error('이전 영상의 링크 발급에 실패했습니다.')
-        if (next.references?.[binding.index]) next.references[binding.index] = { ...next.references[binding.index], url: link.url! }
+        const url = await shareableVideoUrl(binding.media_id)
+        if (next.references?.[binding.index]) next.references[binding.index] = { ...next.references[binding.index], url }
         const scene = workspace.references[binding.index]
-        if (scene) workspace.updateReference(scene.id, { url: link.url })
+        if (scene) workspace.updateReference(scene.id, { url })
       }
       return next
     },
-    [api],
+    [],
   )
 
   /** 요청 한 건을 보내고 기록합니다. 실패하면 문의용 정보를 남기고 오류를 그대로 던집니다. */
   const submit = useCallback(
     async (payload: VideoGenerationRequest, projectId: string, bindings: MediaBinding[]) => {
       const at = new Date().toISOString()
+      const api = currentVideoApi()
       try {
         const json = await api.createJob(payload)
         if (typeof json.id !== 'string' || !json.id) {
-          throw new LetsurApiError('접수 응답에 작업 ID가 없습니다. 실제 접수 여부를 확인해주세요.', { payload: json })
+          throw new GatewayApiError('접수 응답에 작업 ID가 없습니다. 실제 접수 여부를 확인해주세요.', { payload: json })
         }
         useProjectStore.getState().upsertRecord({
           id: json.id,
+          gateway: api.gateway,
           project_id: projectId,
           created_at: at,
           updated_at: at,
@@ -218,11 +236,12 @@ export function JobProvider({ children }: { children: ReactNode }) {
         })
         return { id: json.id, raw: JSON.stringify(json, null, 2) }
       } catch (error) {
-        const err = error instanceof LetsurApiError ? error : new LetsurApiError((error as Error).message)
+        const err = error instanceof GatewayApiError ? error : new GatewayApiError((error as Error).message)
         useWorkspaceStore.getState().set({
           lastSubmission: {
+            gateway: api.gateway,
             at,
-            endpoint: 'POST /v1/video/generations',
+            endpoint: api.gateway === 'openrouter' ? 'POST /api/v1/videos' : 'POST /v1/video/generations',
             body: payload,
             status: err.status,
             code: err.code,
@@ -236,7 +255,7 @@ export function JobProvider({ children }: { children: ReactNode }) {
         throw err
       }
     },
-    [api],
+    [],
   )
 
   const generate = useCallback(async () => {
@@ -244,9 +263,12 @@ export function JobProvider({ children }: { children: ReactNode }) {
     if (workspace.submitting || workspace.uploads) return
     workspace.set({ notice: '', noticeError: false })
     let payload: GenerationRequest
+    let spec: ModelSpec
     try {
-      payload = validatePayload(buildPayload(currentDraft()))
-      validateDraftInputs(currentDraft())
+      const draft = currentDraft()
+      spec = draft.spec
+      payload = validatePayload(buildPayload(draft), spec)
+      validateDraftInputs(draft)
       if (!useSessionStore.getState().apiKey.trim()) throw new Error('API 키를 입력해주세요.')
       const wait = (workspace.submitBlock?.until ?? 0) - Date.now()
       if (wait > 0) throw new Error(`대기열이 가득 차 있습니다. ${Math.ceil(wait / 1000)}초 뒤 다시 요청해주세요.`)
@@ -271,7 +293,7 @@ export function JobProvider({ children }: { children: ReactNode }) {
     let sent = false
     const accepted: string[] = []
     try {
-      payload = validatePayload(await refreshReferenceLinks(payload))
+      payload = validatePayload(await refreshReferenceLinks(payload), spec)
       sent = true
       for (let index = 0; index < count; index += 1) {
         // 후보마다 같은 시드를 보내면 비교 의미가 없어 1씩 늘립니다.
@@ -292,7 +314,7 @@ export function JobProvider({ children }: { children: ReactNode }) {
             : '장면을 만들고 있습니다. 잠시 기다려주세요.',
       )
     } catch (error) {
-      const err = error instanceof LetsurApiError ? error : new LetsurApiError((error as Error).message)
+      const err = error instanceof GatewayApiError ? error : new GatewayApiError((error as Error).message)
       if (err.payload) useWorkspaceStore.getState().set({ rawResponse: JSON.stringify(err.payload, null, 2) })
       const partial = accepted.length ? `시안 ${accepted.length}개는 접수되었고 나머지는 보내지 않았습니다.\n` : ''
       if (!sent) {
@@ -307,7 +329,7 @@ export function JobProvider({ children }: { children: ReactNode }) {
         const { status, extra } = classifySubmitError(err)
         // 공개 API 문서에는 아직 draft 필드가 없어, 스페이스에 시안 기능이 열리지 않았다면 400이 날 수 있습니다.
         const previewNote =
-          payload.draft && err.status === 400
+          payload.draft && err.status === 400 && err.gateway === 'letsur'
             ? '\n시안(draft) 기능이 이 스페이스에 아직 열리지 않았을 수 있습니다. 바로 생성으로 바꾸거나 렛서에 이용 가능 여부를 확인하세요.'
             : ''
         if (!accepted.length) useWorkspaceStore.getState().set({ status })
@@ -345,8 +367,8 @@ export function JobProvider({ children }: { children: ReactNode }) {
           watchJob(result.id)
           return result.id
         } catch (error) {
-          const err = error as LetsurApiError
-          throw new LetsurApiError(err.message + classifySubmitError(err).extra, {
+          const err = error as GatewayApiError
+          throw new GatewayApiError(err.message + classifySubmitError(err).extra, {
             status: err.status,
             code: err.code,
             ref: err.ref,
@@ -364,9 +386,9 @@ export function JobProvider({ children }: { children: ReactNode }) {
     async (media: ResultMedia) => {
       let result
       try {
-        result = await api.issueMediaLink(media.media_id)
+        result = await videoApiForMedia(media.media_id).issueMediaLink(media.media_id)
       } catch (error) {
-        const err = error as LetsurApiError
+        const err = error as GatewayApiError
         if (err.status === 410) {
           throw new Error('파일 보관기한이 지나 더 이상 받을 수 없습니다. 링크를 다시 발급해도 보관기한은 늘어나지 않습니다.', { cause: error })
         }
@@ -375,13 +397,14 @@ export function JobProvider({ children }: { children: ReactNode }) {
         }
         throw err
       }
-      if (!safeUrl(result.url ?? '')) throw new Error('유효한 HTTPS 미디어 링크가 없습니다.')
+      const url = playableUrl(result.url ?? '')
+      if (!url) throw new Error('유효한 HTTPS 미디어 링크가 없습니다.')
       useWorkspaceStore.getState().set({
         media: useWorkspaceStore.getState().media.map((item) =>
           item.media_id === media.media_id
             ? {
                 ...item,
-                url: result.url,
+                url,
                 url_expires_at: result.url_expires_at,
                 ...(result.expires_at !== undefined ? { expires_at: result.expires_at } : {}),
                 state: 'ready',
@@ -390,9 +413,9 @@ export function JobProvider({ children }: { children: ReactNode }) {
         ),
       })
       toast('파일 링크가 준비되었습니다.')
-      if (result.url) showMedia(result.url, media.kind, media.media_id)
+      showMedia(url, media.kind, media.media_id)
     },
-    [api, showMedia],
+    [showMedia],
   )
 
   const addVideoRef = useCallback(
@@ -407,8 +430,7 @@ export function JobProvider({ children }: { children: ReactNode }) {
         throw new Error('영상 참조는 최대 10개입니다.')
       }
       const targetProjectId = useProjectStore.getState().activeProjectId
-      const link = await api.issueMediaLink(media.media_id)
-      if (!safeUrl(link.url ?? '')) throw new Error('유효한 영상 링크를 받지 못했습니다.')
+      const url = await shareableVideoUrl(media.media_id)
       if (targetProjectId !== useProjectStore.getState().activeProjectId) {
         throw new Error('프로젝트가 변경되어 참조를 추가하지 않았습니다. 현재 프로젝트에서 다시 선택해주세요.')
       }
@@ -416,18 +438,18 @@ export function JobProvider({ children }: { children: ReactNode }) {
       workspace.addReference({
         type: 'video',
         role: 'reference_video',
-        url: link.url,
+        url,
         mediaId: media.media_id,
         status: '이전 생성 영상 · 전송 직전에 링크를 다시 갱신합니다.',
       })
-      if (!workspace.mode) workspace.set({ mode: 'reference' })
+      if (!workspace.mode && modelCapabilities(currentModel()).videoModes) workspace.set({ mode: 'reference' })
       const switched = workspace.generation === 'preview'
       if (switched) workspace.set({ generation: 'direct' })
       toast(
         `이전 영상을 참조로 추가했습니다.${switched ? ' 영상 입력은 시안을 지원하지 않아 바로 생성으로 바꿨습니다.' : ''} 장면 설명을 작성하고 생성하세요.`,
       )
     },
-    [api, navigate],
+    [navigate],
   )
 
   const restoreRequest = useCallback(
@@ -449,11 +471,16 @@ export function JobProvider({ children }: { children: ReactNode }) {
         return
       }
       if (!confirm('현재 작성 중인 설정을 이 기록의 설정으로 바꿀까요?')) return
+      // 기록을 만든 게이트웨이와 모델로 되돌려야 같은 요청 형식으로 다시 보낼 수 있습니다.
+      const sourceGateway = source?.gateway ?? 'letsur'
+      const switched = useSessionStore.getState().gateway !== sourceGateway
+      if (switched) useSessionStore.getState().setGateway(sourceGateway)
       navigate('/')
       workspace.set({
         firstFramePreview: null,
         useCommon: false,
         useShared: false,
+        model: p.model,
         prompt: p.prompt || '',
         imageUrl: p.image_url || '',
         imagePerson: false,
@@ -486,7 +513,7 @@ export function JobProvider({ children }: { children: ReactNode }) {
         })
       }
       toast(
-        `${fromPreview ? '확정 결과의 원본 시안 설정을 불러왔습니다.' : '당시의 전체 요청을 불러왔습니다.'} 중복 적용을 막기 위해 이번 장면의 공통 설정 적용을 껐습니다.`,
+        `${fromPreview ? '확정 결과의 원본 시안 설정을 불러왔습니다.' : '당시의 전체 요청을 불러왔습니다.'}${switched ? ` 새 요청도 ${GATEWAYS[sourceGateway].label}로 보내도록 게이트웨이를 바꿨습니다.` : ''} 중복 적용을 막기 위해 이번 장면의 공통 설정 적용을 껐습니다.`,
       )
     },
     [navigate],
@@ -496,12 +523,13 @@ export function JobProvider({ children }: { children: ReactNode }) {
     async (jobId: string, mediaId?: string) => {
       const workspace = useWorkspaceStore.getState()
       if (workspace.submitting || workspace.uploads) throw new Error('현재 요청이 끝난 뒤 이어 만들기를 선택해주세요.')
+      if (!capabilitiesFor(gatewayOfJob(jobId), findRecord(jobId)?.request?.model).lastFrame) {
+        throw new Error('이 모델의 결과에는 마지막 프레임 이미지가 없어 이어 만들기를 사용할 수 없습니다.')
+      }
       const projectId = useProjectStore.getState().activeProjectId
       workspace.setNotice('마지막 프레임을 확인하고 있습니다…')
-      const response = await api.getJob(jobId)
+      const { job } = await videoApiForJob(jobId).getJob(jobId)
       if (projectId !== useProjectStore.getState().activeProjectId) return
-      const job = response.data?.job
-      if (!job) throw new Error('작업 정보를 찾지 못했습니다.')
       rememberJob(job, jobId)
       if (job.status !== 'succeeded') throw new Error('생성 완료 후 마지막 프레임을 사용할 수 있습니다.')
       // 배열의 첫 항목이 이미지라고 가정하지 않고 kind로 찾습니다 (가이드 §6.1).
@@ -518,13 +546,13 @@ export function JobProvider({ children }: { children: ReactNode }) {
       if (!media || media.state !== 'ready') {
         throw new Error('마지막 프레임이 준비되지 않았거나 사용할 수 없습니다. 작업을 다시 조회해주세요.')
       }
-      const link = await api.issueMediaLink(media.media_id)
+      const link = await videoApiForMedia(media.media_id).issueMediaLink(media.media_id)
       if (!safeUrl(link.url ?? '')) throw new Error('마지막 프레임 링크가 유효하지 않습니다.')
       workspace.set({
         continuation: { jobId, mediaId: media.media_id, projectId, previewUrl: link.url! },
       })
     },
-    [api],
+    [],
   )
 
   const applyContinuation = useCallback(
@@ -535,7 +563,7 @@ export function JobProvider({ children }: { children: ReactNode }) {
       if (workspace.submitting || workspace.uploads) throw new Error('현재 요청이 끝난 뒤 적용해주세요.')
       workspace.bumpUploads(1)
       try {
-        const blob = file || (await api.downloadMedia(source.mediaId))
+        const blob = file || (await videoApiForMedia(source.mediaId).downloadMedia(source.mediaId))
         if (!isAllowedMime(IMAGE_MIMES, blob.type) || !blob.size || blob.size > 30 * 1024 * 1024) {
           throw new Error('30 MiB 이하의 지원되는 이미지 파일을 선택해주세요.')
         }
@@ -543,6 +571,10 @@ export function JobProvider({ children }: { children: ReactNode }) {
           blob.type
         ] || 'image'
         const uploadFile = new File([blob], `last-frame-${source.jobId}.${extension}`, { type: blob.type })
+        // 다음 영상은 지금 선택한 게이트웨이로 보내므로 그쪽에 올립니다.
+        const api = currentVideoApi()
+        const caps = modelCapabilities(currentModel())
+        managed = managed && caps.managedUpload
         const result = await api.uploadReference(uploadFile, managed ? 'managed' : 'file')
         if (!result.reference || !validRef(result.reference)) throw new Error('업로드 참조를 받지 못했습니다.')
         if (source.projectId !== useProjectStore.getState().activeProjectId) {
@@ -554,9 +586,9 @@ export function JobProvider({ children }: { children: ReactNode }) {
           imagePerson: managed,
           useShared: false,
           mode: '',
-          ratio: 'adaptive',
-          lastFrame: 'true',
-          store: 'true',
+          ratio: currentModel().aspectRatios.includes('adaptive') ? 'adaptive' : '',
+          lastFrame: caps.lastFrame ? 'true' : '',
+          store: caps.storeMedia ? 'true' : '',
           refOpen: true,
           firstFramePreview: source.previewUrl,
           continuation: null,
@@ -574,7 +606,7 @@ export function JobProvider({ children }: { children: ReactNode }) {
         useWorkspaceStore.getState().bumpUploads(-1)
       }
     },
-    [api, navigate],
+    [navigate],
   )
 
   const cancelContinuation = useCallback(() => {

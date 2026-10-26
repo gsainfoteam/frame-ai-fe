@@ -8,7 +8,9 @@ import { EmptyState } from '@/shared/ui/EmptyState'
 import { TextInput } from '@/shared/ui/Field'
 import { StatusBadge } from '@/shared/ui/StatusBadge'
 import { cn } from '@/shared/lib/cn'
-import { safeUrl } from '@/shared/lib/url'
+import { playableUrl } from '@/shared/lib/url'
+import { capabilitiesFor } from '@/domain/models'
+import { gatewayOfMedia } from '@/api'
 import { toast } from '@/stores/toastStore'
 import { useWorkspaceStore } from '@/stores/workspaceStore'
 import { useJob } from '@/features/create/jobContext'
@@ -44,6 +46,7 @@ export function CreatePage() {
 /** Jobs 문서의 `url_unavailable_reason` 값 */
 const unavailableReasonLabel: Record<string, string> = {
   copying: '복사 중 · 자동으로 다시 조회합니다',
+  download_failed: '재생용 사본을 받지 못했습니다 · 링크 갱신으로 다시 받으세요',
   failed: '파일 복사 실패 · 작업 ID로 문의하세요',
   retention_expired: '보관기한 만료 · 새 링크로 복구할 수 없습니다',
 }
@@ -56,7 +59,9 @@ const mediaStateTone: Record<string, string> = {
 
 function MediaBlock({ item, jobId }: { item: ResultMedia; jobId: string }) {
   const { showMedia, refreshLink, addVideoRef, prepareContinuation } = useJob()
-  const url = item.url ? safeUrl(item.url) : null
+  const url = item.url ? playableUrl(item.url) : null
+  const record = useProjectStore((s) => s.records.find((r) => r.id === jobId))
+  const continuable = capabilitiesFor(record?.gateway ?? gatewayOfMedia(item.media_id), record?.request?.model).lastFrame
   const kindLabel = item.kind === 'video' ? '영상' : item.kind === 'image' ? '이미지' : item.kind
   const stateLabel = { pending: '준비 중', ready: '준비됨', unavailable: '사용 불가' }[item.state] || item.state
   const reusable = item.state === 'ready' && Boolean(item.media_id)
@@ -91,9 +96,11 @@ function MediaBlock({ item, jobId }: { item: ResultMedia; jobId: string }) {
             <Button size="sm" onClick={() => void addVideoRef(item).catch((error: Error) => toast(error.message, true))}>
               이 영상을 참조로
             </Button>
-            <Button size="sm" onClick={() => void prepareContinuation(jobId).catch((error: Error) => toast(error.message, true))}>
-              마지막 프레임으로 이어 만들기
-            </Button>
+            {continuable ? (
+              <Button size="sm" onClick={() => void prepareContinuation(jobId).catch((error: Error) => toast(error.message, true))}>
+                마지막 프레임으로 이어 만들기
+              </Button>
+            ) : null}
           </>
         ) : null}
         {item.kind === 'image' && reusable ? (
@@ -182,9 +189,11 @@ function InquiryButton({ jobId, size = 'md' }: { jobId: string; size?: 'sm' | 'm
       onClick={() =>
         void copyText(inquiryText({ record, failure: lastSubmission })).then((ok) =>
           toast(
-            ok
-              ? '문의용 정보를 복사했습니다. 스페이스 이름과 계정 이메일을 채워 렛서 플랫폼의 문의 기능에 남겨주세요.'
-              : '복사하지 못했습니다.',
+            !ok
+              ? '복사하지 못했습니다.'
+              : (record?.gateway ?? lastSubmission?.gateway) === 'openrouter'
+                ? '진단 정보를 복사했습니다. OpenRouter 활동 기록(Activity)과 함께 확인하거나 지원 문의에 첨부하세요.'
+                : '문의용 정보를 복사했습니다. 스페이스 이름과 계정 이메일을 채워 렛서 플랫폼의 문의 기능에 남겨주세요.',
             !ok,
           ),
         )

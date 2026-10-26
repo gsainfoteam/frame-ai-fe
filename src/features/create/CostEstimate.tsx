@@ -5,7 +5,8 @@ import { useCostSummary } from '@/features/create/useCostSummary'
 
 /** 생성 설정 안의 예상 비용 상세. 금액은 생성 바에도 보이므로 상세는 접어 둡니다. */
 export function CostEstimate() {
-  const { count, estimate, finalize, total } = useCostSummary()
+  const { count, estimate, finalize, total, spec } = useCostSummary()
+  const openRouter = spec.gateway === 'openrouter'
 
   return (
     <Disclosure className="mt-4" label="예상 비용 상세" meta={total ?? '사전 견적 불가'}>
@@ -15,16 +16,22 @@ export function CostEstimate() {
         ) : (
           <p className="text-lg font-semibold text-foreground">사전 견적 불가</p>
         )}
-        <a href={ASSETS_PRICING_URL} target="_blank" rel="noopener noreferrer" className="text-xs">
-          단가 {PRICING_AS_OF} 기준 · 최신 단가 ↗
-        </a>
+        {openRouter ? (
+          <a href={`https://openrouter.ai/${spec.id}`} target="_blank" rel="noopener noreferrer" className="text-xs">
+            OpenRouter 모델 목록 단가 기준 · 모델 페이지 ↗
+          </a>
+        ) : (
+          <a href={ASSETS_PRICING_URL} target="_blank" rel="noopener noreferrer" className="text-xs">
+            단가 {PRICING_AS_OF} 기준 · 최신 단가 ↗
+          </a>
+        )}
       </div>
 
       {estimate.ok ? (
         <>
           {count > 1 ? (
             <p className="mt-0.5 text-xs text-muted">
-              시안 {count}개 × {formatEstimate(estimate.cost)} · 채택하지 않은 시안도 청구됩니다
+              시안 {count}개 × {formatEstimate(estimate.cost, estimate.currency)} · 채택하지 않은 시안도 청구됩니다
             </p>
           ) : null}
 
@@ -38,15 +45,15 @@ export function CostEstimate() {
             <div className="min-w-0">
               <dt className="text-muted">예상 토큰</dt>
               <dd className="mt-0.5 font-medium tabular-nums">
-                {estimate.tokens.toLocaleString('ko-KR')}
-                {count > 1 ? ` × ${count}` : ''}
+                {estimate.tokens === undefined ? '초 단위 과금' : estimate.tokens.toLocaleString('ko-KR')}
+                {estimate.tokens !== undefined && count > 1 ? ` × ${count}` : ''}
               </dd>
             </div>
             <div className="min-w-0">
               <dt className="text-muted">적용 단가</dt>
               <dd className="mt-0.5 font-medium tabular-nums">
-                {estimate.pricePerMillion.toFixed(2)} unit
-                <span className="block font-normal text-muted">100만 토큰당</span>
+                {estimate.rate.value}
+                <span className="block font-normal text-muted">{estimate.rate.per}당</span>
               </dd>
             </div>
           </dl>

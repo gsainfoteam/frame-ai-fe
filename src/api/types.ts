@@ -1,3 +1,5 @@
+import type { GatewayId } from '@/api/gateway'
+
 export type MediaKind = 'image' | 'video' | 'audio'
 export type MediaState = 'pending' | 'ready' | 'unavailable'
 export type JobStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'unknown'
@@ -26,7 +28,8 @@ export type GenerationRequest = {
   image_url?: string
   mode?: VideoMode
   duration?: number
-  resolution?: Resolution
+  /** 렛서는 480p·720p·1080p, OpenRouter는 모델이 지원하는 값(768p, 4K 등) */
+  resolution?: string
   aspect_ratio?: string
   generate_audio: boolean
   seed?: number
@@ -99,6 +102,8 @@ export type ApiErrorInfo = {
 
 export type JobRecord = {
   id: string
+  /** 작업을 만든 게이트웨이. 없으면 렛서 작업입니다(이전 기록 호환). */
+  gateway?: GatewayId
   project_id: string
   created_at: string
   updated_at: string
@@ -143,13 +148,14 @@ export type RawUsage = {
   items?: Array<{ unit?: string; quantity?: string | number; unit_price?: string | number }>
 }
 
-export type LetsurJob = {
+/** 게이트웨이와 무관하게 정규화한 작업. 렛서 Jobs 응답 형태를 기준으로 합니다. */
+export type GatewayJob = {
   id?: string
   status: string
   model?: string
   created_at?: string
   updated_at?: string
-  /** `letsur`이면 렛서에 보관, `none`이면 보관하지 않아 반복 조회로도 받을 수 없음 */
+  /** 렛서: `letsur`이면 보관, `none`이면 보관하지 않아 반복 조회로도 받을 수 없음. OpenRouter: `openrouter` */
   result?: { storage?: string; media?: ResultMedia[] }
   usage?: RawUsage
   error?: ApiErrorInfo
@@ -161,8 +167,10 @@ export type CreateJobResponse = {
   estimated_cost?: unknown
 }
 
-export type GetJobResponse = {
-  data?: { job?: LetsurJob }
+/** 조회 결과. `raw`는 게이트웨이의 원본 응답으로 화면의 응답 보기에 씁니다. */
+export type JobSnapshot = {
+  job: GatewayJob
+  raw: unknown
 }
 
 export type UploadReferenceResponse = {

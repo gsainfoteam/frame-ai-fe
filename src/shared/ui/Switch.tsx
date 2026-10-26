@@ -4,6 +4,7 @@ import { cn } from '@/shared/lib/cn'
 type Props = {
   id?: string
   checked: boolean
+  disabled?: boolean
   onChange: (checked: boolean) => void
   /** 스위치 옆에 보일 현재 상태 설명 */
   children?: ReactNode
@@ -11,16 +12,17 @@ type Props = {
 }
 
 /** 켜고 끄는 설정용 스위치. Field 라벨의 htmlFor로 이름을 붙입니다. */
-export function Switch({ id, checked, onChange, children, className }: Props) {
+export function Switch({ id, checked, disabled, onChange, children, className }: Props) {
   return (
     <button
       id={id}
       type="button"
       role="switch"
       aria-checked={checked}
+      disabled={disabled}
       onClick={() => onChange(!checked)}
       className={cn(
-        'flex h-8 w-full cursor-pointer items-center justify-between gap-3 rounded-md border border-line bg-surface px-2.5 text-sm transition-colors hover:border-line-strong',
+        'flex h-8 w-full cursor-pointer items-center justify-between gap-3 rounded-md border border-line bg-surface px-2.5 text-sm transition-colors hover:border-line-strong disabled:cursor-not-allowed disabled:opacity-50',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30',
         className,
       )}
