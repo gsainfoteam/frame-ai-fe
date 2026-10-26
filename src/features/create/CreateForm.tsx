@@ -15,6 +15,7 @@ import { useProjectStore } from '@/stores/projectStore'
 import { currentDraft } from '@/features/create/draft'
 import { ReferenceCard } from '@/features/create/ReferenceEditor'
 import { CostEstimate } from '@/features/create/CostEstimate'
+import { useCostSummary } from '@/features/create/useCostSummary'
 import { downloadJson } from '@/shared/lib/download'
 
 export function SceneForm() {
@@ -44,7 +45,7 @@ export function SceneForm() {
         <TextArea
           id="prompt"
           required
-          className="min-h-32"
+          className="min-h-40"
           placeholder="예: 이른 아침의 고요한 숲. 나뭇잎 사이로 햇빛이 내려오고 옅은 안개가 흐른다."
           value={prompt}
           onChange={(e) => set({ prompt: e.target.value })}
@@ -318,16 +319,19 @@ function RequestPreview() {
   )
 }
 
+/**
+ * 폼의 직접 자식으로 두어 왼쪽 열 하단에 고정됩니다. 오류·API 키 안내·입력 조건·예상 금액을
+ * 버튼 옆 한곳에 모아 스크롤 위치와 상관없이 보이게 합니다.
+ */
 export function GenerateBar() {
   useWorkspaceStore()
   useProjectStore()
   const submitting = useWorkspaceStore((s) => s.submitting)
   const uploads = useWorkspaceStore((s) => s.uploads)
-  const generation = useWorkspaceStore((s) => s.generation)
-  const previewCount = useWorkspaceStore((s) => s.previewCount)
   const blockedFor = useCountdown(useWorkspaceStore((s) => s.submitBlock))
   const apiKey = useSessionStore((s) => s.apiKey)
   const openKeyDialog = useSessionStore((s) => s.setKeyDialogOpen)
+  const { preview, count, estimate, total } = useCostSummary()
   const draft = currentDraft()
   const payload = buildPayload(draft)
   let error = ''
@@ -342,34 +346,51 @@ export function GenerateBar() {
     ref.type === 'video' && ref.durationSec !== undefined ? [ref.durationSec] : [],
   )
   const lengthWarning = totalVideoWarning(videoSeconds)
-  const count = generation === 'preview' ? previewCount : 1
-  const label =
-    generation === 'preview' ? (count > 1 ? `480p 시안 ${count}개 만들기 ↗` : '480p 시안 만들기 ↗') : '영상 생성 ↗'
+  const label = preview ? (count > 1 ? `480p 시안 ${count}개 만들기 ↗` : '480p 시안 만들기 ↗') : '영상 생성 ↗'
+  const busy = submitting || uploads > 0 || blockedFor > 0
 
   return (
-    <div className="space-y-2.5">
-      {error ? (
-        <p
-          className="whitespace-pre-wrap rounded-md border border-danger-line bg-danger-soft px-3 py-2 text-sm text-danger"
-          role="alert"
-        >
-          {error}
-        </p>
-      ) : null}
-      {apiKey ? null : (
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-md border border-line bg-surface px-3 py-2.5 text-sm text-muted">
-          <span>영상을 생성하려면 렛서 API 키가 필요합니다.</span>
-          <Button size="sm" className="ml-auto" onClick={() => openKeyDialog(true)}>
-            API 키 입력
-          </Button>
+    <div className="sticky bottom-0 z-10 -mx-1 bg-gradient-to-t from-background via-background to-transparent px-1 pb-3 pt-5">
+      <div className="rounded-lg border border-line-strong bg-panel px-3 py-2.5 shadow-card sm:px-4 sm:py-3">
+        {error || lengthWarning ? (
+          <p
+            className="scrollbar-slim mb-2.5 max-h-24 overflow-y-auto whitespace-pre-wrap rounded-md border border-danger-line bg-danger-soft px-2.5 py-1.5 text-xs text-danger"
+            role="alert"
+          >
+            {error || `주의: ${lengthWarning}`}
+          </p>
+        ) : null}
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2.5">
+          <div className="min-w-0 flex-1 basis-48">
+            <p className="text-sm font-semibold tabular-nums text-foreground">
+              {estimate.ok ? `예상 ${total}` : '사전 견적 불가'}
+              {estimate.ok ? (
+                <span className="ml-1.5 text-xs font-normal text-muted">
+                  {count > 1 ? `시안 ${count}개 · ` : ''}
+                  {estimate.resolution} · {estimate.duration}초
+                </span>
+              ) : null}
+            </p>
+            <p className="mt-0.5 truncate text-xs text-muted" title={apiKey ? hint : undefined}>
+              {apiKey ? hint : '영상을 생성하려면 렛서 API 키가 필요합니다.'}
+            </p>
+          </div>
+          {apiKey ? (
+            <Button variant="primary" size="lg" type="submit" className="w-full sm:w-auto sm:min-w-44" disabled={busy}>
+              {submitting
+                ? '접수 중…'
+                : uploads > 0
+                  ? '업로드 중…'
+                  : blockedFor > 0
+                    ? `대기열 가득 참 · ${blockedFor}초 뒤`
+                    : label}
+            </Button>
+          ) : (
+            <Button variant="primary" size="lg" className="w-full sm:w-auto sm:min-w-44" onClick={() => openKeyDialog(true)}>
+              API 키 입력
+            </Button>
+          )}
         </div>
-      )}
-      {lengthWarning ? <p className="text-xs text-danger">주의: {lengthWarning}</p> : null}
-      <p className="text-xs text-muted">{hint}</p>
-      <div className="sticky bottom-0 -mx-4 bg-gradient-to-t from-background via-background to-transparent px-4 pb-3 pt-3 sm:-mx-6 sm:px-6">
-        <Button variant="primary" size="lg" type="submit" block disabled={submitting || uploads > 0 || blockedFor > 0}>
-          {submitting ? '접수 중…' : uploads > 0 ? '업로드 중…' : blockedFor > 0 ? `대기열 가득 참 · ${blockedFor}초 뒤 다시 요청` : label}
-        </Button>
       </div>
     </div>
   )
