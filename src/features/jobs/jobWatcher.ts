@@ -1,7 +1,8 @@
 import { create } from 'zustand'
-import type { GetJobResponse, JobStatus, LetsurJob } from '@/api/types'
-import { LetsurApiError, isRetryableRateLimit, isTransportError } from '@/api/errors'
-import { createLetsurClient } from '@/api/letsur/client'
+import type { JobStatus, GatewayJob } from '@/api/types'
+import type { GatewayId } from '@/api/gateway'
+import { getVideoApi } from '@/api'
+import { GatewayApiError, isRetryableRateLimit, isTransportError } from '@/api/errors'
 import { POLL_MAX_WAIT_MS, POLL_TRANSPORT_FAILURES } from '@/config/constants'
 import { nextPollDelay, settleJob } from '@/domain/polling'
 import { normalizeUsage } from '@/domain/usage'
@@ -17,7 +18,7 @@ export type WatchPhase = 'polling' | 'retrying' | 'settled' | 'timeout' | 'stopp
 export type JobWatch = {
   id: string
   phase: WatchPhase
-  job?: LetsurJob
+  job?: GatewayJob
   raw?: string
   /** 진행·완료 안내 또는 마지막 오류 */
   message: string
@@ -31,7 +32,6 @@ type Listener = (watch: JobWatch, event: WatchEvent) => void
 
 export const useJobWatchStore = create<{ watches: Record<string, JobWatch> }>(() => ({ watches: {} }))
 
-const api = createLetsurClient(() => useSessionStore.getState().apiKey)
 const timers = new Map<string, number>()
 const epochs = new Map<string, number>()
 const listeners = new Set<Listener>()
@@ -70,12 +70,22 @@ function clearTimer(id: string) {
   timers.delete(id)
 }
 
+/** 작업을 만든 게이트웨이. 이 기기에 기록이 없는 작업(ID로 조회)은 현재 선택한 게이트웨이로 봅니다. */
+export function gatewayOfJob(id: string): GatewayId {
+  return useProjectStore.getState().records.find((item) => item.id === id)?.gateway ?? useSessionStore.getState().gateway
+}
+
+export function videoApiForJob(id: string) {
+  return getVideoApi(gatewayOfJob(id))
+}
+
 /** 조회 결과를 이 브라우저의 생성 기록에 반영합니다. */
-export function rememberJob(job: LetsurJob, id: string) {
+export function rememberJob(job: GatewayJob, id: string) {
   const status = (['queued', 'running', 'succeeded', 'failed'].includes(job.status) ? job.status : 'unknown') as JobStatus
   const usage = normalizeUsage(job.usage)
   useProjectStore.getState().upsertRecord({
     id: job.id || id,
+    gateway: gatewayOfJob(job.id || id),
     status,
     updated_at: job.updated_at || new Date().toISOString(),
     ...(job.created_at ? { created_at: job.created_at } : {}),
@@ -89,22 +99,15 @@ export function rememberJob(job: LetsurJob, id: string) {
   })
 }
 
-function readJob(json: GetJobResponse) {
-  const job = json.data?.job
-  if (!job) throw new LetsurApiError('응답에서 작업 정보를 찾지 못했습니다.', { code: 'missing_job' })
-  return job
-}
-
 /** 작업을 한 번 조회해 기록에 반영합니다. 자동 조회와 별개입니다. */
 export async function fetchJobOnce(id: string) {
-  const json = await api.getJob(id)
-  const job = readJob(json)
+  const { job, raw } = await videoApiForJob(id).getJob(id)
   rememberJob(job, id)
   const settlement = settleJob(job)
   const current = useJobWatchStore.getState().watches[id]
   patch(id, {
     job,
-    raw: JSON.stringify(json, null, 2),
+    raw: JSON.stringify(raw, null, 2),
     ...(isWatchActive(current) ? {} : { phase: settlement.settled ? 'settled' : 'stopped' }),
   })
   return job
@@ -133,12 +136,12 @@ async function poll(id: string, epoch: number, attempt: number, transportFailure
   }
 
   try {
-    const json = await api.getJob(id)
+    const snapshot = await videoApiForJob(id).getJob(id)
     if (epochs.get(id) !== epoch) return
-    const job = readJob(json)
+    const job = snapshot.job
     rememberJob(job, id)
     const settlement = settleJob(job)
-    const raw = JSON.stringify(json, null, 2)
+    const raw = JSON.stringify(snapshot.raw, null, 2)
     if (settlement.settled) {
       const watch = patch(id, { job, raw, phase: 'settled', nextAt: undefined, message: settlement.note, messageIsError: false })
       emit(watch, 'update')
@@ -150,7 +153,7 @@ async function poll(id: string, epoch: number, attempt: number, transportFailure
     emit(patch(id, { job, raw, phase: 'polling', nextAt, message: settlement.note, messageIsError: false }), 'update')
   } catch (error) {
     if (epochs.get(id) !== epoch) return
-    const err = error instanceof LetsurApiError ? error : new LetsurApiError((error as Error).message || '조회 실패')
+    const err = error instanceof GatewayApiError ? error : new GatewayApiError((error as Error).message || '조회 실패')
     // 503(result_unavailable 등)과 재시도 가능한 429는 안내된 시간 뒤 같은 작업을 다시 조회합니다.
     if (isRetryableRateLimit(err) || err.status === 503) {
       const delay = err.retry ?? nextPollDelay(attempt)
@@ -166,7 +169,7 @@ async function poll(id: string, epoch: number, attempt: number, transportFailure
       )
       return
     }
-    // 연결 실패와 502·504는 간격을 늘려 제한적으로 재시도합니다 (렛서 오류 처리 문서).
+    // 연결 실패와 502·504는 간격을 늘려 제한적으로 재시도합니다 (게이트웨이 오류 처리 문서).
     const transient = isTransportError(err) || err.status === 502 || err.status === 504
     if (transient && transportFailures + 1 < POLL_TRANSPORT_FAILURES) {
       const delay = nextPollDelay(attempt)

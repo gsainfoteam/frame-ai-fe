@@ -1,3 +1,4 @@
+import { capabilitiesFor } from '@/domain/models'
 import { HISTORY_BACKUP_MIB } from '@/config/constants'
 import { parseProjectBackup } from '@/domain/backup'
 import { downloadJson } from '@/shared/lib/download'
@@ -128,7 +129,7 @@ export function HistoryPage() {
                       설정 불러오기
                     </Button>
                   ) : null}
-                  {record.status === 'succeeded' ? (
+                  {record.status === 'succeeded' && capabilitiesFor(record.gateway ?? 'letsur', record.request?.model).lastFrame ? (
                     <Button size="sm" onClick={() => void prepareContinuation(record.id).catch((e: Error) => toast(e.message, true))}>
                       마지막 프레임으로 이어 만들기
                     </Button>
@@ -160,7 +161,7 @@ export function HistoryPage() {
                       size="sm"
                       variant="subtle"
                       onClick={() => {
-                        if (!confirm('이 기기의 기록만 삭제합니다. 렛서의 영상은 삭제하지 않습니다.')) return
+                        if (!confirm('이 기기의 기록만 삭제합니다. 게이트웨이에 있는 영상은 삭제하지 않습니다.')) return
                         deleteRecord(record.id)
                       }}
                     >

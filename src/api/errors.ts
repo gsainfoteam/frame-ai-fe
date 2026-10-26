@@ -1,4 +1,8 @@
-export class LetsurApiError extends Error {
+import type { GatewayId } from '@/api/gateway'
+
+export class GatewayApiError extends Error {
+  /** 응답을 보낸 게이트웨이. 연결 실패처럼 응답이 없으면 비어 있습니다. */
+  gateway?: GatewayId
   status?: number
   code?: string
   /** 공통 오류 형식의 `error_ref`. 문의 시 전달합니다. */
@@ -8,10 +12,11 @@ export class LetsurApiError extends Error {
 
   constructor(
     message: string,
-    init?: { status?: number; code?: string; ref?: string; retry?: number; payload?: unknown },
+    init?: { gateway?: GatewayId; status?: number; code?: string; ref?: string; retry?: number; payload?: unknown },
   ) {
     super(message)
-    this.name = 'LetsurApiError'
+    this.name = 'GatewayApiError'
+    this.gateway = init?.gateway
     this.status = init?.status
     this.code = init?.code
     this.ref = init?.ref
@@ -55,19 +60,21 @@ export function extractErrorRef(payload: unknown): string | undefined {
 }
 
 /**
- * 간격을 두고 다시 보내도 되는 429. 대기열 한도(`queue_full`)와 `rate_limit_exceeded`만 해당하며,
+ * 간격을 두고 다시 보내도 되는 429. 렛서는 대기열 한도(`queue_full`)와 `rate_limit_exceeded`만 해당하며,
  * 사용량·정책 한도(`usage_limit_exceeded`, `policy_limit_exceeded`)는 재시도하지 않습니다.
+ * OpenRouter의 429는 요청 빈도 제한이므로 Retry-After 뒤에 다시 보낼 수 있습니다(크레딧 부족은 402).
  */
-export function isRetryableRateLimit(error: LetsurApiError) {
+export function isRetryableRateLimit(error: GatewayApiError) {
   if (error.status !== 429) return false
+  if (error.gateway === 'openrouter') return true
   return error.code === 'queue_full' || error.code === 'rate_limit_exceeded' || /queue_full/.test(JSON.stringify(error.payload ?? ''))
 }
 
-export function isMediaNotReady(error: LetsurApiError) {
+export function isMediaNotReady(error: GatewayApiError) {
   return error.status === 503 && (error.code === 'MEDIA_NOT_READY' || /MEDIA_NOT_READY/.test(JSON.stringify(error.payload ?? '')))
 }
 
 /** 응답 시간 초과·연결 실패처럼 HTTP 상태를 받지 못한 오류 */
 export function isTransportError(error: unknown) {
-  return error instanceof LetsurApiError && error.status === undefined && error.code === undefined
+  return error instanceof GatewayApiError && error.status === undefined && error.code === undefined
 }

@@ -13,6 +13,7 @@ import {
   type StoredMedia,
   type VideoGenerationRequest,
 } from '@/api/types'
+import { isGatewayId } from '@/api/gateway'
 import { IMAGE_MIMES, PROJECT_NAME_MAX, isAllowedMime } from '@/config/constants'
 import { validRef } from '@/shared/lib/url'
 import { normalizeUsage } from '@/domain/usage'
@@ -70,6 +71,7 @@ export function cleanRecord(record: unknown): JobRecord {
     media: [],
     bindings: [],
   }
+  if (isGatewayId(r.gateway) && r.gateway !== 'letsur') out.gateway = r.gateway
   if (Array.isArray(r.media)) {
     out.media = r.media
       .filter(

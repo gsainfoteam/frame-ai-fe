@@ -5,6 +5,7 @@ import { Button } from '@/shared/ui/Button'
 import { FileButton } from '@/shared/ui/FileButton'
 import { Checkbox, Select, TextInput } from '@/shared/ui/Field'
 import { useVideoApi } from '@/hooks/useVideoApi'
+import { useActiveModel } from '@/features/create/useActiveModel'
 import { rememberImage } from '@/storage/imageRepository'
 import { useProjectStore } from '@/stores/projectStore'
 import { toast } from '@/stores/toastStore'
@@ -21,6 +22,11 @@ type Props = {
 
 export function ReferenceCard({ value, shared, onChange, onRemove }: Props) {
   const api = useVideoApi()
+  const { gateway, caps } = useActiveModel()
+  /** OpenRouter에는 업로드 API가 없어 이미지는 브라우저에 보관했다가 보낼 때 함께 넣습니다. */
+  const canUpload = value.type === 'image' || caps.mediaUpload
+  const managed = caps.managedUpload && value.managed
+  const uploadLabel = caps.mediaUpload ? '파일 업로드' : '브라우저에 보관'
   const bumpUploads = useWorkspaceStore((s) => s.bumpUploads)
   const submitting = useWorkspaceStore((s) => s.submitting)
   const uploads = useWorkspaceStore((s) => s.uploads)
@@ -55,23 +61,27 @@ export function ReferenceCard({ value, shared, onChange, onRemove }: Props) {
     }
     const projectId = useProjectStore.getState().activeProjectId
     bumpUploads(1)
-    onChange({ status: '파일 업로드 중…' })
+    onChange({ status: caps.mediaUpload ? '파일 업로드 중…' : '브라우저에 보관하는 중…' })
     try {
-      const result = await api.uploadReference(file, value.managed ? 'managed' : 'file')
+      const result = await api.uploadReference(file, managed ? 'managed' : 'file')
       if (!result.reference) throw new Error('업로드 응답에 reference가 없습니다.')
       onChange({
         url: result.reference,
-        status:
-          `업로드 완료 · ${file.name}` +
-          (result.track === 'managed' || value.managed
-            ? ' · 관리형 (생성 시 공급사 등록·심사 진행)'
-            : ' · 일반 파일'),
+        status: !caps.mediaUpload
+          ? `보관 완료 · ${file.name} · 생성 요청에 이미지 데이터로 함께 보냅니다`
+          : `업로드 완료 · ${file.name}` +
+            (result.track === 'managed' || managed ? ' · 관리형 (생성 시 공급사 등록·심사 진행)' : ' · 일반 파일'),
       })
       if (value.type === 'image') {
         try {
-          await rememberImage(file, result.reference, (result.track || (value.managed ? 'managed' : 'file')) as UploadTrack, projectId)
+          await rememberImage(file, result.reference, (result.track || (managed ? 'managed' : 'file')) as UploadTrack, projectId)
         } catch (error) {
-          onChange({ status: '렛서 업로드는 성공했지만 원본의 브라우저 저장에 실패했습니다.' })
+          onChange({
+            url: caps.mediaUpload ? result.reference : '',
+            status: caps.mediaUpload
+              ? `${gateway.label} 업로드는 성공했지만 원본의 브라우저 저장에 실패했습니다.`
+              : '이미지를 브라우저에 보관하지 못했습니다. 저장 공간을 확인하거나 HTTPS URL을 입력해주세요.',
+          })
           toast((error as Error).message, true)
           return
         }
@@ -111,7 +121,7 @@ export function ReferenceCard({ value, shared, onChange, onRemove }: Props) {
             </option>
           ))}
         </Select>
-        {value.managed ? (
+        {managed ? (
           <span className="rounded-full bg-accent-soft px-2 py-0.5 text-2xs font-medium text-accent">관리형</span>
         ) : null}
         <Button variant="subtle" size="sm" disabled={busy} onClick={onRemove} aria-label="참조 삭제">
@@ -122,78 +132,84 @@ export function ReferenceCard({ value, shared, onChange, onRemove }: Props) {
       <TextInput
         className="mt-2"
         aria-label="참조 URL"
-        placeholder="HTTPS URL 또는 업로드한 참조"
+        placeholder={canUpload ? 'HTTPS URL 또는 업로드한 참조' : `HTTPS URL · ${gateway.label}에는 영상·오디오 파일을 올릴 수 없습니다`}
         value={value.url}
         disabled={busy}
         onChange={(e) => onChange({ url: e.target.value, mediaId: undefined })}
       />
 
-      <div className="mt-2 flex flex-wrap items-center gap-2">
-        <FileButton
-          aria-label="업로드할 참조 파일"
-          accept={MIME_BY_TYPE[value.type].join(',')}
-          disabled={busy}
-          label={
-            value.file ? <span className="max-w-44 truncate">{value.file.name}</span> : '파일 선택'
-          }
-          onChange={async (event) => {
-            const file = event.target.files?.[0] ?? null
-            onChange({
-              file,
-              url: '',
-              mediaId: undefined,
-              durationSec: undefined,
-              status: '파일을 선택했습니다. 파일 업로드 버튼을 눌러주세요.',
-            })
-            if (!file) return
-            if (value.type === 'image') {
-              const dimensions = await readImageDimensions(file)
-              const warnings = dimensions ? imageWarnings(dimensions.width, dimensions.height) : []
-              onChange({
-                status:
-                  `${dimensions ? `${dimensionLabel(dimensions.width, dimensions.height)} · ` : '크기 확인 불가 · '}파일 업로드 버튼을 눌러주세요.` +
-                  warnings.map((warning) => `\n주의: ${warning}`).join(''),
-              })
-            } else {
-              const seconds = await readMediaDuration(file, value.type)
-              const warning = seconds === null ? null : durationWarning(value.type, seconds)
-              onChange({
-                durationSec: seconds ?? undefined,
-                status:
-                  `${seconds === null ? '길이 확인 불가' : formatSeconds(seconds)} · 파일 업로드 버튼을 눌러주세요.` +
-                  (warning ? `\n주의: ${warning}` : ''),
-              })
+      {canUpload ? (
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <FileButton
+            aria-label="업로드할 참조 파일"
+            accept={MIME_BY_TYPE[value.type].join(',')}
+            disabled={busy}
+            label={
+              value.file ? <span className="max-w-44 truncate">{value.file.name}</span> : '파일 선택'
             }
-          }}
-        />
-        <Button disabled={busy || !value.file} onClick={() => void upload()}>
-          파일 업로드
-        </Button>
-      </div>
+            onChange={async (event) => {
+              const file = event.target.files?.[0] ?? null
+              onChange({
+                file,
+                url: '',
+                mediaId: undefined,
+                durationSec: undefined,
+                status: `파일을 선택했습니다. ${uploadLabel} 버튼을 눌러주세요.`,
+              })
+              if (!file) return
+              if (value.type === 'image') {
+                const dimensions = await readImageDimensions(file)
+                const warnings = dimensions ? imageWarnings(dimensions.width, dimensions.height) : []
+                onChange({
+                  status:
+                    `${dimensions ? `${dimensionLabel(dimensions.width, dimensions.height)} · ` : '크기 확인 불가 · '}${uploadLabel} 버튼을 눌러주세요.` +
+                    warnings.map((warning) => `\n주의: ${warning}`).join(''),
+                })
+              } else {
+                const seconds = await readMediaDuration(file, value.type)
+                const warning = seconds === null ? null : durationWarning(value.type, seconds)
+                onChange({
+                  durationSec: seconds ?? undefined,
+                  status:
+                    `${seconds === null ? '길이 확인 불가' : formatSeconds(seconds)} · ${uploadLabel} 버튼을 눌러주세요.` +
+                    (warning ? `\n주의: ${warning}` : ''),
+                })
+              }
+            }}
+          />
+          <Button disabled={busy || !value.file} onClick={() => void upload()}>
+            {uploadLabel}
+          </Button>
+        </div>
+      ) : null}
 
-      <Checkbox
-        className="mt-2.5"
-        label="인물 포함 / 공급사 자산 등록 필요 → 관리형 업로드"
-        checked={value.managed}
-        disabled={busy}
-        onChange={(e) => {
-          const managed = e.target.checked
-          onChange({
-            managed,
-            mediaId: undefined,
-            url: value.url ? '' : value.url,
-            status: value.url
-              ? '업로드 방식이 변경되었습니다. 파일을 다시 업로드하거나 해당 방식의 참조를 입력해주세요.'
-              : value.status,
-          })
-        }}
-      />
-      <p className="mt-1.5 text-xs text-muted">
-        일반 업로드는 배경·소품, 관리형은 인물 참조에 사용합니다.{' '}
-        <a href={SEEDANCE_GUIDE_URL} target="_blank" rel="noopener noreferrer">
-          모델 가이드 ↗
-        </a>
-      </p>
+      {caps.managedUpload ? (
+        <>
+          <Checkbox
+            className="mt-2.5"
+            label="인물 포함 / 공급사 자산 등록 필요 → 관리형 업로드"
+            checked={value.managed}
+            disabled={busy}
+            onChange={(e) => {
+              const managed = e.target.checked
+              onChange({
+                managed,
+                mediaId: undefined,
+                url: value.url ? '' : value.url,
+                status: value.url
+                  ? '업로드 방식이 변경되었습니다. 파일을 다시 업로드하거나 해당 방식의 참조를 입력해주세요.'
+                  : value.status,
+              })
+            }}
+          />
+          <p className="mt-1.5 text-xs text-muted">
+            일반 업로드는 배경·소품, 관리형은 인물 참조에 사용합니다.{' '}
+            <a href={SEEDANCE_GUIDE_URL} target="_blank" rel="noopener noreferrer">
+              모델 가이드 ↗
+            </a>
+          </p>
+        </>
+      ) : null}
       {value.status ? (
         <p className="mt-1.5 whitespace-pre-wrap break-words text-xs text-accent" role="status">
           {value.status}

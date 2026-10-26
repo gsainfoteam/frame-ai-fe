@@ -3,7 +3,7 @@ import { Link } from 'react-router'
 import { PREVIEW_MAX_CANDIDATES } from '@/config/constants'
 import { totalVideoWarning } from '@/domain/inputChecks'
 import { cn } from '@/shared/lib/cn'
-import { buildPayload, inputHint, validateDraftInputs, validatePayload } from '@/domain/seedance'
+import { buildPayload, inputHint, supportsWatermark, validateDraftInputs, validatePayload } from '@/domain/seedance'
 import { Button } from '@/shared/ui/Button'
 import { Card, CardHeader } from '@/shared/ui/Card'
 import { CodeBlock } from '@/shared/ui/CodeBlock'
@@ -18,7 +18,17 @@ import { currentDraft } from '@/features/create/draft'
 import { ReferenceCard } from '@/features/create/ReferenceEditor'
 import { CostEstimate } from '@/features/create/CostEstimate'
 import { useCostSummary } from '@/features/create/useCostSummary'
+import { useActiveModel } from '@/features/create/useActiveModel'
+import { durationLabel, type ModelSpec } from '@/domain/models'
+import { ModelPicker } from '@/features/create/ModelPicker'
 import { downloadJson } from '@/shared/lib/download'
+import { toKlingBody } from '@/api/letsur/kling'
+
+/** 고르기 쉬운 길이만 칩으로 두고, 나머지는 직접 입력으로 받습니다. */
+function durationPresets(spec: ModelSpec) {
+  if (spec.durations.length <= 8) return { presets: spec.durations, custom: false }
+  return { presets: [5, 10, 15, 20, 30].filter((value) => spec.durations.includes(value)), custom: true }
+}
 
 export function SceneForm() {
   const prompt = useWorkspaceStore((s) => s.prompt)
@@ -35,6 +45,7 @@ export function SceneForm() {
   const updateReference = useWorkspaceStore((s) => s.updateReference)
   const removeReference = useWorkspaceStore((s) => s.removeReference)
   const hasVideoRef = references.some((ref) => ref.type === 'video')
+  const { caps, spec } = useActiveModel()
 
   return (
     <Card>
@@ -76,7 +87,7 @@ export function SceneForm() {
               <TextInput
                 id="firstFrameUrl"
                 value={imageUrl}
-                placeholder="https://… 또는 letsur-file://…"
+                placeholder={caps.mediaUpload ? 'https://… 또는 letsur-file://…' : 'https://…'}
                 onChange={(e) => set({ imageUrl: e.target.value, firstFramePreview: null })}
               />
             </Field>
@@ -90,12 +101,14 @@ export function SceneForm() {
                 <figcaption className="text-xs text-muted">다음 영상의 시작 이미지</figcaption>
               </figure>
             ) : null}
-            <Checkbox
-              className="mt-2"
-              label="이 첫 프레임에 인물이 포함되어 있음"
-              checked={imagePerson}
-              onChange={(e) => set({ imagePerson: e.target.checked })}
-            />
+            {caps.managedUpload ? (
+              <Checkbox
+                className="mt-2"
+                label="이 첫 프레임에 인물이 포함되어 있음"
+                checked={imagePerson}
+                onChange={(e) => set({ imagePerson: e.target.checked })}
+              />
+            ) : null}
           </div>
 
           <div>
@@ -120,13 +133,13 @@ export function SceneForm() {
             </Button>
           </div>
 
-          {hasVideoRef || mode ? (
+          {caps.videoModes && (hasVideoRef || mode) ? (
             <Field label="영상 참조 사용 방식" hint="영상 참조가 있을 때만 적용됩니다.">
               <Select value={mode} onChange={(e) => set({ mode: e.target.value })}>
                 <option value="">기본값 사용</option>
-                <option value="reference">영상 참고 · reference</option>
-                <option value="edit">영상 편집 · edit</option>
-                <option value="extend">영상 연장 · extend</option>
+                <option value="reference">영상 참고 · {spec.kind === 'kling-omni' ? 'feature' : 'reference'}</option>
+                <option value="edit">영상 편집 · {spec.kind === 'kling-omni' ? 'base' : 'edit'}</option>
+                {spec.kind === 'kling-omni' ? null : <option value="extend">영상 연장 · extend</option>}
               </Select>
             </Field>
           ) : null}
@@ -136,22 +149,21 @@ export function SceneForm() {
   )
 }
 
-const DURATION_OPTIONS: ChipOption<string>[] = [
-  { value: '', label: '기본', title: '모델 기본값 · 일반 생성 5초, 편집·연장은 자동' },
-  { value: '5', label: '5초' },
-  { value: '10', label: '10초' },
-  { value: '15', label: '15초' },
-  { value: '20', label: '20초' },
-  { value: '30', label: '30초' },
-  { value: '-1', label: '자동', title: '모델이 길이를 정합니다. 사전 견적을 낼 수 없습니다.' },
-  { value: 'custom', label: '직접 입력' },
-]
+function durationOptions(spec: ModelSpec): ChipOption<string>[] {
+  const { presets, custom } = durationPresets(spec)
+  return [
+    { value: '', label: '기본', title: spec.kind === 'seedance' ? '모델 기본값 · 일반 생성 5초, 편집·연장은 자동' : '모델 기본값' },
+    ...presets.map((value) => ({ value: String(value), label: `${value}초` })),
+    ...(spec.autoDuration ? [{ value: '-1', label: '자동', title: '모델이 길이를 정합니다. 사전 견적을 낼 수 없습니다.' }] : []),
+    ...(custom ? [{ value: 'custom', label: '직접 입력' }] : []),
+  ]
+}
 
-const RESOLUTION_OPTIONS: ChipOption<string>[] = [
-  { value: '480p', label: '480p', title: '빠른 확인' },
-  { value: '720p', label: '720p', title: 'HD' },
-  { value: '1080p', label: '1080p', title: 'Full HD' },
-]
+const RESOLUTION_TITLES: Record<string, string> = { '480p': '빠른 확인', '720p': 'HD', '1080p': 'Full HD', '4K': 'UHD' }
+
+function resolutionOptions(spec: ModelSpec): ChipOption<string>[] {
+  return spec.resolutions.map((value) => ({ value, label: value, title: RESOLUTION_TITLES[value] }))
+}
 
 /** 비율 모양을 14px 상자 안에 그립니다. */
 function RatioIcon({ ratio }: { ratio: string }) {
@@ -173,28 +185,36 @@ function RatioIcon({ ratio }: { ratio: string }) {
   )
 }
 
-const RATIO_OPTIONS: ChipOption<string>[] = [
-  { value: '', label: '기본', title: '입력에 따른 기본값 · 텍스트만 쓰면 16:9' },
-  ...['16:9', '9:16', '1:1', '4:3', '3:4', '21:9'].map((ratio) => ({
-    value: ratio,
-    label: (
-      <>
-        <RatioIcon ratio={ratio} />
-        {ratio}
-      </>
-    ),
-  })),
-  {
-    value: 'adaptive',
-    label: (
-      <>
-        <RatioIcon ratio="adaptive" />
-        자동 맞춤
-      </>
-    ),
-    title: '입력 이미지·영상의 비율을 따릅니다 (adaptive).',
-  },
-]
+function ratioOptions(spec: ModelSpec): ChipOption<string>[] {
+  return [
+    { value: '', label: '기본', title: '입력에 따른 기본값 · 텍스트만 쓰면 16:9' },
+    ...spec.aspectRatios
+      .filter((ratio) => ratio !== 'adaptive')
+      .map((ratio) => ({
+        value: ratio,
+        label: (
+          <>
+            <RatioIcon ratio={ratio} />
+            {ratio}
+          </>
+        ),
+      })),
+    ...(spec.aspectRatios.includes('adaptive')
+      ? [
+          {
+            value: 'adaptive',
+            label: (
+              <>
+                <RatioIcon ratio="adaptive" />
+                자동 맞춤
+              </>
+            ),
+            title: '입력 이미지·영상의 비율을 따릅니다 (adaptive).',
+          },
+        ]
+      : []),
+  ]
+}
 
 export function GenerationSettings() {
   const duration = useWorkspaceStore((s) => s.duration)
@@ -217,64 +237,99 @@ export function GenerationSettings() {
       s.references.some((ref) => ref.role === 'first_frame' || ref.role === 'last_frame') ||
       (s.useShared && s.sharedReferences.some((ref) => ref.role === 'first_frame' || ref.role === 'last_frame')),
   )
+  const { caps, spec, models, status, error: modelError, unavailable } = useActiveModel()
   const continuityReady = lastFrame === 'true' && store === 'true'
-  const preview = generation === 'preview'
-  const editMode = mode === 'edit'
-  // 입력 비율을 따르는 조합에서는 고정 비율을 고를 수 없습니다 (Seedance 입력 방식 표).
-  const ratioLocked = framed || mode === 'edit' || mode === 'extend'
+  const preview = caps.draft && generation === 'preview'
+  const seedance = spec.kind === 'seedance'
+  const editMode = caps.videoModes && mode === 'edit'
+  // 렛서 Seedance는 입력 비율을 따르는 조합에서 고정 비율을 고를 수 없습니다 (Seedance 입력 방식 표).
+  const ratioLocked = seedance && (framed || mode === 'edit' || mode === 'extend')
+  const watermarkSupported = supportsWatermark(spec)
 
   return (
     <Card>
       <CardHeader
         title="생성 설정"
-        description="연속 장면 준비를 켜면 마지막 프레임 반환과 결과 보관을 함께 설정합니다."
+        description={
+          caps.lastFrame
+            ? '연속 장면 준비를 켜면 마지막 프레임 반환과 결과 보관을 함께 설정합니다.'
+            : `${spec.label}이(가) 지원하는 길이·해상도·비율만 고를 수 있습니다.`
+        }
         actions={
-          <Button
-            disabled={continuityReady}
-            onClick={() => {
-              set({ lastFrame: 'true', store: 'true' })
-              useWorkspaceStore.getState().setNotice('마지막 프레임 반환과 결과 보관을 켰습니다. 다음 생성부터 적용됩니다.')
-            }}
-          >
-            {continuityReady ? '연속 장면 준비됨' : '연속 장면 준비'}
-          </Button>
+          caps.lastFrame ? (
+            <Button
+              disabled={continuityReady}
+              onClick={() => {
+                set({ lastFrame: 'true', store: 'true' })
+                useWorkspaceStore.getState().setNotice('마지막 프레임 반환과 결과 보관을 켰습니다. 다음 생성부터 적용됩니다.')
+              }}
+            >
+              {continuityReady ? '연속 장면 준비됨' : '연속 장면 준비'}
+            </Button>
+          ) : undefined
         }
       />
-      <Field
-        className="mb-4"
-        label="생성 방식"
-        hint={
-          preview
-            ? '480p로 구도·움직임을 비교한 뒤 고른 시안만 1080p로 확정합니다. 시안과 확정 모두 과금되고, 확정할 때는 내용을 바꿀 수 없습니다.'
-            : hasVideoInput
-              ? '영상 참조·편집·연장에는 시안을 사용할 수 없습니다.'
-              : '내용이 정해져 있거나 480p·720p로 충분하면 바로 생성이 더 저렴합니다.'
-        }
-      >
-        <div className="grid grid-cols-2 gap-1 rounded-md border border-line bg-surface p-1" role="radiogroup" aria-label="생성 방식">
-          {(
-            [
-              ['direct', '바로 생성'],
-              ['preview', '480p 시안 먼저'],
-            ] as const
-          ).map(([value, label]) => (
-            <button
-              key={value}
-              type="button"
-              role="radio"
-              aria-checked={generation === value}
-              disabled={value === 'preview' && hasVideoInput}
-              onClick={() => set({ generation: value })}
-              className={cn(
-                'h-8 cursor-pointer rounded text-sm font-medium text-muted transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50',
-                generation === value && 'bg-panel text-accent shadow-card',
-              )}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-      </Field>
+      {caps.modelPicker ? (
+        <Field
+          className="mb-4"
+          label="모델"
+          htmlFor="model"
+          hint={
+            status === 'loading'
+              ? 'OpenRouter 모델 목록을 불러오는 중입니다.'
+              : status === 'error'
+                ? `${modelError} 기본 모델(${spec.label})로 진행합니다.`
+                : unavailable(spec.id)
+                  ? '현재 키의 스페이스에서 이 모델을 찾지 못했습니다. 에셋 화면에서 이용 권한을 확인하세요.'
+                  : undefined
+          }
+        >
+          <ModelPicker
+            id="model"
+            value={spec}
+            models={models.length ? models : [spec]}
+            unavailable={unavailable}
+            onChange={(id) => set({ model: id })}
+          />
+        </Field>
+      ) : null}
+      {caps.draft ? (
+        <Field
+          className="mb-4"
+          label="생성 방식"
+          hint={
+            preview
+              ? '480p로 구도·움직임을 비교한 뒤 고른 시안만 1080p로 확정합니다. 시안과 확정 모두 과금되고, 확정할 때는 내용을 바꿀 수 없습니다.'
+              : hasVideoInput
+                ? '영상 참조·편집·연장에는 시안을 사용할 수 없습니다.'
+                : '내용이 정해져 있거나 480p·720p로 충분하면 바로 생성이 더 저렴합니다.'
+          }
+        >
+          <div className="grid grid-cols-2 gap-1 rounded-md border border-line bg-surface p-1" role="radiogroup" aria-label="생성 방식">
+            {(
+              [
+                ['direct', '바로 생성'],
+                ['preview', '480p 시안 먼저'],
+              ] as const
+            ).map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                role="radio"
+                aria-checked={generation === value}
+                disabled={value === 'preview' && hasVideoInput}
+                onClick={() => set({ generation: value })}
+                className={cn(
+                  'h-8 cursor-pointer rounded text-sm font-medium text-muted transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50',
+                  generation === value && 'bg-panel text-accent shadow-card',
+                )}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </Field>
+      ) : null}
       <div className="space-y-4">
         <Field
           label={<span id="duration-label">영상 길이</span>}
@@ -284,7 +339,7 @@ export function GenerationSettings() {
             ariaLabelledBy="duration-label"
             value={duration}
             onChange={(value) => set({ duration: value })}
-            options={DURATION_OPTIONS.map((option) => ({
+            options={durationOptions(spec).map((option) => ({
               ...option,
               disabled: editMode && option.value !== '' && option.value !== '-1',
               title: editMode && option.value !== '' && option.value !== '-1' ? '영상 편집에서는 사용할 수 없습니다.' : option.title,
@@ -295,14 +350,14 @@ export function GenerationSettings() {
               <TextInput
                 className="w-24"
                 type="number"
-                min={4}
-                max={30}
+                min={spec.durations[0]}
+                max={spec.durations[spec.durations.length - 1]}
                 step={1}
                 value={customDuration}
                 aria-label="직접 입력한 영상 길이"
                 onChange={(e) => set({ customDuration: Number(e.target.value) })}
               />
-              <span className="text-sm text-muted">초 · 4–30초 정수</span>
+              <span className="text-sm text-muted">초 · {durationLabel(spec)} 정수</span>
             </div>
           ) : null}
         </Field>
@@ -329,13 +384,17 @@ export function GenerationSettings() {
                 ariaLabelledBy="resolution-label"
                 value={resolution}
                 onChange={(value) => set({ resolution: value })}
-                options={RESOLUTION_OPTIONS}
+                options={resolutionOptions(spec)}
               />
             </Field>
           )}
-          <Field label="오디오 생성" htmlFor="audio-switch">
-            <Switch id="audio-switch" checked={audio} onChange={(checked) => set({ audio: checked })}>
-              {audio ? '켜짐' : '꺼짐 · 무음'}
+          <Field
+            label="오디오 생성"
+            htmlFor="audio-switch"
+            hint={spec.audio ? undefined : `${spec.label}은(는) 오디오 생성 여부를 고를 수 없습니다.`}
+          >
+            <Switch id="audio-switch" checked={spec.audio && audio} disabled={!spec.audio} onChange={(checked) => set({ audio: checked })}>
+              {spec.audio && audio ? '켜짐' : '꺼짐 · 무음'}
             </Switch>
           </Field>
         </div>
@@ -352,7 +411,7 @@ export function GenerationSettings() {
             ariaLabelledBy="ratio-label"
             value={ratio}
             onChange={(value) => set({ ratio: value })}
-            options={RATIO_OPTIONS.map((option) => ({
+            options={ratioOptions(spec).map((option) => ({
               ...option,
               disabled: ratioLocked && option.value !== '' && option.value !== 'adaptive',
               title:
@@ -366,32 +425,46 @@ export function GenerationSettings() {
 
       <CostEstimate />
 
-      <Disclosure className="mt-4" label="고급 설정" meta="시드 · 워터마크 · 결과 보관">
+      <Disclosure
+        className="mt-4"
+        label="고급 설정"
+        meta={[spec.seed && '시드', watermarkSupported && '워터마크', caps.storeMedia && '결과 보관'].filter(Boolean).join(' · ') || '없음'}
+      >
         <div className="grid gap-x-4 gap-y-3 sm:grid-cols-2">
-          <Field label="시드 (선택)" hint="같은 시드가 같은 결과를 보장하지는 않습니다.">
-            <TextInput type="number" step={1} placeholder="지정하지 않음" value={seed} onChange={(e) => set({ seed: e.target.value })} />
-          </Field>
-          <Field label="워터마크">
-            <Select value={watermark} onChange={(e) => set({ watermark: e.target.value })}>
-              <option value="">모델 기본값</option>
-              <option value="true">사용</option>
-              <option value="false">사용 안 함</option>
-            </Select>
-          </Field>
-          <Field label="마지막 프레임 반환">
-            <Select value={lastFrame} onChange={(e) => set({ lastFrame: e.target.value })}>
-              <option value="">모델 기본값</option>
-              <option value="true">반환</option>
-              <option value="false">반환 안 함</option>
-            </Select>
-          </Field>
-          <Field label="결과 보관">
-            <Select value={store} onChange={(e) => set({ store: e.target.value })}>
-              <option value="">스페이스 설정 따르기</option>
-              <option value="false">임시 보관 · 약 1시간</option>
-              <option value="true">결과 보관</option>
-            </Select>
-          </Field>
+          {spec.seed ? (
+            <Field label="시드 (선택)" hint="같은 시드가 같은 결과를 보장하지는 않습니다.">
+              <TextInput type="number" step={1} placeholder="지정하지 않음" value={seed} onChange={(e) => set({ seed: e.target.value })} />
+            </Field>
+          ) : (
+            <p className="text-xs text-muted sm:col-span-2">{spec.label}은(는) 시드를 지원하지 않습니다.</p>
+          )}
+          {watermarkSupported ? (
+            <Field label="워터마크">
+              <Select value={watermark} onChange={(e) => set({ watermark: e.target.value })}>
+                <option value="">모델 기본값</option>
+                <option value="true">사용</option>
+                <option value="false">사용 안 함</option>
+              </Select>
+            </Field>
+          ) : null}
+          {caps.lastFrame ? (
+            <Field label="마지막 프레임 반환">
+              <Select value={lastFrame} onChange={(e) => set({ lastFrame: e.target.value })}>
+                <option value="">모델 기본값</option>
+                <option value="true">반환</option>
+                <option value="false">반환 안 함</option>
+              </Select>
+            </Field>
+          ) : null}
+          {caps.storeMedia ? (
+            <Field label="결과 보관">
+              <Select value={store} onChange={(e) => set({ store: e.target.value })}>
+                <option value="">스페이스 설정 따르기</option>
+                <option value="false">임시 보관 · 약 1시간</option>
+                <option value="true">결과 보관</option>
+              </Select>
+            </Field>
+          ) : null}
         </div>
       </Disclosure>
 
@@ -404,7 +477,10 @@ export function GenerationSettings() {
 function RequestPreview() {
   useWorkspaceStore()
   useProjectStore()
-  const payload = buildPayload(currentDraft())
+  const draft = currentDraft()
+  const generic = buildPayload(draft)
+  // 렛서 Kling은 필드 이름이 달라 실제로 보낼 본문으로 바꿔 보여 줍니다.
+  const payload = draft.spec.kind?.startsWith('kling') ? toKlingBody(generic) : generic
 
   return (
     <Disclosure className="mt-2.5" label="전송할 요청 JSON 확인">
@@ -428,17 +504,18 @@ export function GenerateBar() {
   const blockedFor = useCountdown(useWorkspaceStore((s) => s.submitBlock))
   const apiKey = useSessionStore((s) => s.apiKey)
   const openKeyDialog = useSessionStore((s) => s.setKeyDialogOpen)
+  const { gateway } = useActiveModel()
   const { preview, count, estimate, total } = useCostSummary()
   const draft = currentDraft()
   const payload = buildPayload(draft)
   let error = ''
   try {
-    validatePayload({ ...payload, prompt: payload.prompt || '입력 검사' })
+    validatePayload({ ...payload, prompt: payload.prompt || '입력 검사' }, draft.spec)
     validateDraftInputs(draft)
   } catch (err) {
     error = (err as Error).message
   }
-  const hint = inputHint(payload)
+  const hint = inputHint(payload, draft.spec)
   const videoSeconds = useWorkspaceStore.getState().references.flatMap((ref) =>
     ref.type === 'video' && ref.durationSec !== undefined ? [ref.durationSec] : [],
   )
@@ -470,7 +547,7 @@ export function GenerateBar() {
             </p>
             {/* 입력 조건 안내는 모바일에서 숨겨 바를 한 줄로 유지합니다. API 키 안내는 항상 보입니다. */}
             <p className={cn('mt-0.5 truncate text-xs text-muted', apiKey && 'max-sm:hidden')} title={apiKey ? hint : undefined}>
-              {apiKey ? hint : '영상을 생성하려면 렛서 API 키가 필요합니다.'}
+              {apiKey ? hint : `영상을 생성하려면 ${gateway.label} API 키가 필요합니다.`}
             </p>
           </div>
           {apiKey ? (

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link } from 'react-router'
-import { API_DOCS_URL, MODEL_LABEL } from '@/config/constants'
+import { GATEWAYS, GATEWAY_IDS, isGatewayId } from '@/api/gateway'
 import { Button } from '@/shared/ui/Button'
 import { BrandLogo } from '@/shared/ui/Logo'
 import { Dialog } from '@/shared/ui/Dialog'
@@ -12,10 +12,14 @@ import { useWorkspaceStore } from '@/stores/workspaceStore'
 import { toast } from '@/stores/toastStore'
 import { loadWorkspaceForProject } from '@/features/create/draft'
 import { useJob } from '@/features/create/jobContext'
+import { useActiveModel, useModelSync } from '@/features/create/useActiveModel'
+import { isWatchActive, useJobWatchStore } from '@/features/jobs/jobWatcher'
 
 export function Header() {
   const { stop } = useJob()
   const apiKey = useSessionStore((s) => s.apiKey)
+  const keys = useSessionStore((s) => s.keys)
+  const setGateway = useSessionStore((s) => s.setGateway)
   const setApiKey = useSessionStore((s) => s.setApiKey)
   const clearKey = useSessionStore((s) => s.clearKey)
   const keyOpen = useSessionStore((s) => s.keyDialogOpen)
@@ -28,6 +32,24 @@ export function Header() {
   const [showKey, setShowKey] = useState(false)
   const [newOpen, setNewOpen] = useState(false)
   const [newName, setNewName] = useState('')
+  const { gateway, spec } = useActiveModel()
+  useModelSync()
+
+  const switchGateway = (value: string) => {
+    if (!isGatewayId(value) || value === gateway.id) return
+    const workspace = useWorkspaceStore.getState()
+    if (workspace.submitting || workspace.uploads) {
+      toast('업로드 또는 접수가 끝난 뒤 게이트웨이를 바꿔주세요.', true)
+      return
+    }
+    const active = Object.values(useJobWatchStore.getState().watches).filter(isWatchActive).length
+    setGateway(value)
+    setShowKey(false)
+    toast(
+      `새 요청은 ${GATEWAYS[value].label}로 보냅니다.` +
+        (active ? ` 진행 중인 작업 ${active}개는 만든 게이트웨이의 키로 계속 조회합니다.` : ''),
+    )
+  }
 
   const switchProject = (id: string) => {
     const workspace = useWorkspaceStore.getState()
@@ -76,7 +98,9 @@ export function Header() {
         </Button>
       </div>
       <div className="flex shrink-0 items-center gap-2 sm:ml-auto">
-        <span className="hidden text-xs text-muted md:inline">{MODEL_LABEL}</span>
+        <span className="hidden text-xs text-muted md:inline">
+          {gateway.label} · {spec.label}
+        </span>
         <Button
           size="sm"
           variant={apiKey ? 'default' : 'primary'}
@@ -95,7 +119,7 @@ export function Header() {
           </span>
         </Button>
         <a
-          href={API_DOCS_URL}
+          href={gateway.docsUrl}
           target="_blank"
           rel="noopener noreferrer"
           className="hidden text-xs text-muted transition-colors hover:text-accent sm:inline"
@@ -131,14 +155,38 @@ export function Header() {
           </>
         }
       >
-        <Field label="렛서 API Key" htmlFor="apiKey">
+        <Field
+          className="mb-4"
+          label="게이트웨이"
+          hint="새 생성 요청을 보낼 곳입니다. 이미 만든 작업은 만든 게이트웨이로 조회하므로 두 키를 모두 입력해 둘 수 있습니다."
+        >
+          <div className="grid grid-cols-2 gap-1 rounded-md border border-line bg-surface p-1" role="radiogroup" aria-label="게이트웨이">
+            {GATEWAY_IDS.map((id) => (
+              <button
+                key={id}
+                type="button"
+                role="radio"
+                aria-checked={gateway.id === id}
+                onClick={() => switchGateway(id)}
+                className={cn(
+                  'flex h-8 cursor-pointer items-center justify-center gap-1.5 rounded text-sm font-medium text-muted transition-colors hover:text-foreground',
+                  gateway.id === id && 'bg-panel text-accent shadow-card',
+                )}
+              >
+                {GATEWAYS[id].label}
+                {keys[id] ? <span aria-label="키 입력됨" className="size-1.5 rounded-full bg-accent" /> : null}
+              </button>
+            ))}
+          </div>
+        </Field>
+        <Field label={gateway.keyLabel} htmlFor="apiKey">
           <div className="flex gap-2">
             <TextInput
               id="apiKey"
               type={showKey ? 'text' : 'password'}
               autoComplete="off"
               spellCheck={false}
-              placeholder="API 키를 입력하세요"
+              placeholder={gateway.keyPlaceholder}
               value={apiKey}
               onChange={(e) => setApiKey(e.target.value)}
             />

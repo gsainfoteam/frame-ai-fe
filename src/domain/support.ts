@@ -22,6 +22,7 @@ export function redactRequest(body: VideoGenerationRequest) {
  * `type` 또는 `error.code`, `error_ref`, 작업 ID. API 키와 인증 헤더는 넣지 않습니다.
  */
 export function inquiryText({ record, failure }: { record?: JobRecord; failure?: SubmissionFailure | null }) {
+  if ((failure?.gateway ?? record?.gateway) === 'openrouter') return openRouterDiagnostics({ record, failure })
   const body = failure?.body ?? record?.request ?? null
   const rejected = failure?.status !== undefined && failure.status >= 400 && failure.status < 500
   const missingId = rejected ? '없음 (요청 거절됨 · 접수되지 않음)' : '받지 못함 (접수 여부 확인 필요)'
@@ -45,6 +46,30 @@ export function inquiryText({ record, failure }: { record?: JobRecord; failure?:
       const value = record.error?.[key]
       if (value) lines.push(`error.${key}: ${value}`)
     }
+  }
+  lines.push('요청 본문 (일부 생략):')
+  lines.push(body ? JSON.stringify(redactRequest(body), null, 2) : '(이 기기에 기록 없음)')
+  return lines.join('\n')
+}
+
+/** OpenRouter 작업 진단 정보. 렛서 문의 양식 대신 작업 ID·상태·오류만 모읍니다. API 키와 프롬프트 원문은 넣지 않습니다. */
+function openRouterDiagnostics({ record, failure }: { record?: JobRecord; failure?: SubmissionFailure | null }) {
+  const body = failure?.body ?? record?.request ?? null
+  const lines = [
+    '[Frame · OpenRouter 진단 정보 · API 키·프롬프트 원문 제외]',
+    `작업 ID: ${record?.id || (failure?.status !== undefined && failure.status < 500 ? '없음 (요청 거절됨 · 접수되지 않음)' : '받지 못함 (접수 여부 확인 필요)')}`,
+    `요청 시각: ${failure?.at ?? record?.created_at ?? '알 수 없음'}`,
+    `모델: ${body?.model ?? '알 수 없음'}`,
+  ]
+  if (failure) {
+    lines.push(`엔드포인트: ${failure.endpoint}`)
+    lines.push(`HTTP 상태: ${failure.status ?? '응답 없음 (연결 실패·시간 초과)'}`)
+    if (failure.code) lines.push(`오류 코드: ${failure.code}`)
+  } else if (record) {
+    lines.push(`엔드포인트: GET /api/v1/videos/${record.id}`)
+    lines.push(`작업 상태: ${record.status}`)
+    if (record.error?.code) lines.push(`error.code: ${record.error.code}`)
+    if (record.error?.message) lines.push(`error.message: ${record.error.message}`)
   }
   lines.push('요청 본문 (일부 생략):')
   lines.push(body ? JSON.stringify(redactRequest(body), null, 2) : '(이 기기에 기록 없음)')

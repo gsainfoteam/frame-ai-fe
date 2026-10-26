@@ -6,7 +6,7 @@ import { ASSETS_PRICING_URL } from '@/config/constants'
 import { PRICING_AS_OF, compareCandidates, estimateFinalize, estimateGeneration, formatEstimate } from '@/domain/pricing'
 import { finalizeBlocker, isPreviewRecord } from '@/domain/seedance'
 import { formatAmount, formatUsage, sumUsage } from '@/domain/usage'
-import { safeUrl } from '@/shared/lib/url'
+import { playableUrl } from '@/shared/lib/url'
 import { Button } from '@/shared/ui/Button'
 import { Card, CardHeader } from '@/shared/ui/Card'
 import { Checkbox } from '@/shared/ui/Field'
@@ -137,7 +137,7 @@ function PreviewCard({ record }: { record: JobRecord }) {
   const blocker = finalizeBlocker(record)
   const finals = records.filter((item) => isFinalizeRequest(item.request) && item.request.draft_job === record.id)
   const video = (watch?.job?.result?.media ?? []).find((item) => item.kind === 'video' && item.state === 'ready' && item.url)
-  const videoUrl = video?.url ? safeUrl(video.url) : null
+  const videoUrl = video?.url ? playableUrl(video.url) : null
   const unsettled = record.status === 'queued' || record.status === 'running' || record.status === 'unknown'
 
   // 처리 중인 시안은 자동 조회합니다. 완료된 시안은 재생 링크를 받으려고 한 번만 조회합니다.

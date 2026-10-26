@@ -1,4 +1,4 @@
-import type { LetsurJob } from '@/api/types'
+import type { GatewayJob } from '@/api/types'
 import { POLL_INITIAL_MS, POLL_MAX_MS, POLL_STEP_MS } from '@/config/constants'
 
 /** 10초 → 15초 → … → 30초 */
@@ -13,7 +13,7 @@ export type Settlement = { settled: false; note: string } | { settled: true; not
  * - 생성 완료라도 결과가 `pending`이거나 `copying`이면 계속 조회합니다.
  * - `storage: none`이거나 결과를 받을 수 없는 상태는 반복 조회로 해결되지 않으므로 멈춥니다.
  */
-export function settleJob(job: LetsurJob): Settlement {
+export function settleJob(job: GatewayJob): Settlement {
   if (job.status === 'failed') return { settled: true, note: '' }
   if (job.status !== 'succeeded') return { settled: false, note: '' }
 

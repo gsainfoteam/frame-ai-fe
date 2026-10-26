@@ -59,6 +59,33 @@ export function httpHint(status: number, code?: string, raw = '') {
   }
 }
 
+/** OpenRouter 오류 처리 문서 기준 HTTP 상태별 안내 */
+export function openRouterHint(status: number) {
+  switch (status) {
+    case 400:
+      return '요청 필드를 확인하세요. 모델이 지원하지 않는 길이·해상도·비율이면 오류 내용에 허용 값이 함께 옵니다.'
+    case 401:
+      return 'OpenRouter API 키 값을 확인하세요. 키가 삭제되었거나 비활성화되었을 수 있습니다.'
+    case 402:
+      return '크레딧이 부족합니다. OpenRouter 계정에서 크레딧을 충전하거나 키의 사용 한도를 확인하세요. 반복해서 보내지 마세요.'
+    case 403:
+      return '이 키 또는 계정에서 허용되지 않은 요청입니다. 입력 콘텐츠 심사에 걸렸거나 데이터 정책(ZDR) 때문에 영상 생성이 막혔을 수 있습니다.'
+    case 404:
+      return '모델 ID 또는 작업 ID를 확인하세요. 작업을 만든 계정의 키로 조회해야 합니다.'
+    case 408:
+      return '요청 시간이 초과되었습니다. 생성 요청이었다면 접수됐을 수 있으니 기록을 확인하세요.'
+    case 413:
+      return '요청 본문이 너무 큽니다. 참조 이미지 크기를 줄이거나 HTTPS URL로 넘겨주세요.'
+    case 429:
+      return '요청이 너무 잦습니다. 안내된 시간 뒤에 다시 시도하세요.'
+    case 502:
+    case 503:
+      return '모델 공급사가 일시적으로 응답하지 않습니다. 생성 요청이었다면 접수됐을 수 있으니 기록을 확인한 뒤 다시 시도하세요.'
+    default:
+      return ''
+  }
+}
+
 export function describeError(error: unknown) {
   const e = (error && typeof error === 'object' ? error : {}) as Record<string, unknown>
   const lines: string[] = []

@@ -1,6 +1,8 @@
 import type { MediaReference } from '@/api/types'
 import { validRef } from '@/shared/lib/url'
+import { resolveModel } from '@/stores/modelStore'
 import { useProjectStore } from '@/stores/projectStore'
+import { useSessionStore } from '@/stores/sessionStore'
 import { useWorkspaceStore, type ReferenceDraft } from '@/stores/workspaceStore'
 import type { PayloadDraft } from '@/domain/seedance'
 
@@ -15,10 +17,16 @@ function toDraftRef(ref: ReferenceDraft) {
   }
 }
 
+/** 지금 선택한 게이트웨이와 모델의 지원 범위 */
+export function currentModel() {
+  return resolveModel(useSessionStore.getState().gateway, useWorkspaceStore.getState().model)
+}
+
 export function currentDraft(): PayloadDraft {
   const workspace = useWorkspaceStore.getState()
   const project = useProjectStore.getState().currentProject()
   return {
+    spec: currentModel(),
     commonPrompt: project.prompt,
     useCommon: workspace.useCommon,
     scenePrompt: workspace.prompt,
