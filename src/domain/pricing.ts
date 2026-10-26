@@ -58,6 +58,9 @@ export function estimateGeneration(payload: GenerationRequest): Estimate {
   if (payload.duration === -1) {
     return { ok: false, reason: '길이를 모델이 정하므로 사전 견적을 낼 수 없습니다. 완료 후 실제 사용량을 확인하세요.' }
   }
+  if (payload.duration !== undefined && (!Number.isInteger(payload.duration) || payload.duration < 4 || payload.duration > 30)) {
+    return { ok: false, reason: '영상 길이를 4–30초로 지정하면 예상 비용을 표시합니다.' }
+  }
   const resolution = payload.draft ? '480p' : (payload.resolution ?? '480p')
   const notes: string[] = []
   if (framed(payload) || payload.aspect_ratio === 'adaptive') {

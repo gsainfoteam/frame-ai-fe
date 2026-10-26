@@ -14,7 +14,8 @@ export function StudioLayout() {
 
   return (
     <div className="flex min-h-svh flex-col bg-background text-foreground">
-      <div className="sticky top-0 z-20 border-b border-line bg-background/85 backdrop-blur">
+      {/* 모바일에서는 헤더 줄(h-14)만큼 위로 밀어 고정해, 스크롤하면 탭만 남깁니다. */}
+      <div className="sticky top-0 z-20 border-b border-line bg-background/85 backdrop-blur max-sm:-top-14">
         <Header />
         <WorkspaceTabs />
       </div>

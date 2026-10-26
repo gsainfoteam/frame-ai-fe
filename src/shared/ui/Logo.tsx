@@ -46,11 +46,12 @@ export function LogoMark({ className, size = 36 }: { className?: string; size?: 
 }
 
 /** 마크 + 워드마크. 헤더와 같은 브랜드 자리에서 씁니다. */
-export function BrandLogo({ className }: { className?: string }) {
+/** `compact`이면 모바일에서 글자를 숨기고 마크만 보여줍니다. */
+export function BrandLogo({ className, compact }: { className?: string; compact?: boolean }) {
   return (
     <span className={cn('flex items-center gap-2', className)}>
       <LogoMark />
-      <span className="flex min-w-0 flex-col leading-none">
+      <span className={cn('flex min-w-0 flex-col leading-none', compact && 'max-sm:sr-only')}>
         <span className="text-[22px] font-bold tracking-[-0.035em]">Frame</span>
         <span className="mt-[3px] text-2xs font-medium text-muted">영상 스튜디오</span>
       </span>
