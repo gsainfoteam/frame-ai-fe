@@ -9,6 +9,8 @@ import { Card, CardHeader } from '@/shared/ui/Card'
 import { CodeBlock } from '@/shared/ui/CodeBlock'
 import { Disclosure } from '@/shared/ui/Disclosure'
 import { Checkbox, Field, Select, TextArea, TextInput } from '@/shared/ui/Field'
+import { ChipGroup, type ChipOption } from '@/shared/ui/ChipGroup'
+import { Switch } from '@/shared/ui/Switch'
 import { useSessionStore } from '@/stores/sessionStore'
 import { useWorkspaceStore } from '@/stores/workspaceStore'
 import { useProjectStore } from '@/stores/projectStore'
@@ -134,6 +136,66 @@ export function SceneForm() {
   )
 }
 
+const DURATION_OPTIONS: ChipOption<string>[] = [
+  { value: '', label: '기본', title: '모델 기본값 · 일반 생성 5초, 편집·연장은 자동' },
+  { value: '5', label: '5초' },
+  { value: '10', label: '10초' },
+  { value: '15', label: '15초' },
+  { value: '20', label: '20초' },
+  { value: '30', label: '30초' },
+  { value: '-1', label: '자동', title: '모델이 길이를 정합니다. 사전 견적을 낼 수 없습니다.' },
+  { value: 'custom', label: '직접 입력' },
+]
+
+const RESOLUTION_OPTIONS: ChipOption<string>[] = [
+  { value: '480p', label: '480p', title: '빠른 확인' },
+  { value: '720p', label: '720p', title: 'HD' },
+  { value: '1080p', label: '1080p', title: 'Full HD' },
+]
+
+/** 비율 모양을 14px 상자 안에 그립니다. */
+function RatioIcon({ ratio }: { ratio: string }) {
+  if (ratio === 'adaptive') {
+    return (
+      <svg viewBox="0 0 14 14" aria-hidden="true" className="size-3.5">
+        <rect x="1.5" y="1.5" width="11" height="11" rx="1.5" fill="none" stroke="currentColor" strokeWidth="1.2" strokeDasharray="2 1.6" />
+      </svg>
+    )
+  }
+  const [w, h] = ratio.split(':').map(Number)
+  const scale = 12 / Math.max(w, h)
+  const width = w * scale
+  const height = h * scale
+  return (
+    <svg viewBox="0 0 14 14" aria-hidden="true" className="size-3.5">
+      <rect x={(14 - width) / 2} y={(14 - height) / 2} width={width} height={height} rx="1.2" fill="none" stroke="currentColor" strokeWidth="1.2" />
+    </svg>
+  )
+}
+
+const RATIO_OPTIONS: ChipOption<string>[] = [
+  { value: '', label: '기본', title: '입력에 따른 기본값 · 텍스트만 쓰면 16:9' },
+  ...['16:9', '9:16', '1:1', '4:3', '3:4', '21:9'].map((ratio) => ({
+    value: ratio,
+    label: (
+      <>
+        <RatioIcon ratio={ratio} />
+        {ratio}
+      </>
+    ),
+  })),
+  {
+    value: 'adaptive',
+    label: (
+      <>
+        <RatioIcon ratio="adaptive" />
+        자동 맞춤
+      </>
+    ),
+    title: '입력 이미지·영상의 비율을 따릅니다 (adaptive).',
+  },
+]
+
 export function GenerationSettings() {
   const duration = useWorkspaceStore((s) => s.duration)
   const customDuration = useWorkspaceStore((s) => s.customDuration)
@@ -148,8 +210,18 @@ export function GenerationSettings() {
   const previewCount = useWorkspaceStore((s) => s.previewCount)
   const hasVideoInput = useWorkspaceStore((s) => s.references.some((ref) => ref.type === 'video') || Boolean(s.mode))
   const set = useWorkspaceStore((s) => s.set)
+  const mode = useWorkspaceStore((s) => s.mode)
+  const framed = useWorkspaceStore(
+    (s) =>
+      Boolean(s.imageUrl.trim()) ||
+      s.references.some((ref) => ref.role === 'first_frame' || ref.role === 'last_frame') ||
+      (s.useShared && s.sharedReferences.some((ref) => ref.role === 'first_frame' || ref.role === 'last_frame')),
+  )
   const continuityReady = lastFrame === 'true' && store === 'true'
   const preview = generation === 'preview'
+  const editMode = mode === 'edit'
+  // 입력 비율을 따르는 조합에서는 고정 비율을 고를 수 없습니다 (Seedance 입력 방식 표).
+  const ratioLocked = framed || mode === 'edit' || mode === 'extend'
 
   return (
     <Card>
@@ -203,67 +275,92 @@ export function GenerationSettings() {
           ))}
         </div>
       </Field>
-      <div className="grid gap-x-4 gap-y-3 sm:grid-cols-2">
-        <Field label="영상 길이">
-          <Select value={duration} onChange={(e) => set({ duration: e.target.value })}>
-            <option value="">모델 기본값</option>
-            <option value="-1">자동 선택</option>
-            <option value="5">5초</option>
-            <option value="10">10초</option>
-            <option value="15">15초</option>
-            <option value="20">20초</option>
-            <option value="30">30초</option>
-            <option value="custom">직접 입력 (4–30초)</option>
-          </Select>
+      <div className="space-y-4">
+        <Field
+          label={<span id="duration-label">영상 길이</span>}
+          hint={editMode ? '영상 편집은 입력 영상 길이를 유지하므로 기본 또는 자동만 사용할 수 있습니다.' : undefined}
+        >
+          <ChipGroup
+            ariaLabelledBy="duration-label"
+            value={duration}
+            onChange={(value) => set({ duration: value })}
+            options={DURATION_OPTIONS.map((option) => ({
+              ...option,
+              disabled: editMode && option.value !== '' && option.value !== '-1',
+              title: editMode && option.value !== '' && option.value !== '-1' ? '영상 편집에서는 사용할 수 없습니다.' : option.title,
+            }))}
+          />
           {duration === 'custom' ? (
-            <TextInput
-              className="mt-2"
-              type="number"
-              min={4}
-              max={30}
-              step={1}
-              value={customDuration}
-              aria-label="직접 입력한 영상 길이"
-              onChange={(e) => set({ customDuration: Number(e.target.value) })}
-            />
+            <div className="mt-2 flex items-center gap-2">
+              <TextInput
+                className="w-24"
+                type="number"
+                min={4}
+                max={30}
+                step={1}
+                value={customDuration}
+                aria-label="직접 입력한 영상 길이"
+                onChange={(e) => set({ customDuration: Number(e.target.value) })}
+              />
+              <span className="text-sm text-muted">초 · 4–30초 정수</span>
+            </div>
           ) : null}
         </Field>
-        {preview ? (
-          <Field label="시안 개수" hint="후보마다 별도로 과금됩니다. 시드를 지정하면 후보마다 1씩 늘려 보냅니다.">
-            <Select value={String(previewCount)} onChange={(e) => set({ previewCount: Number(e.target.value) })}>
-              {Array.from({ length: PREVIEW_MAX_CANDIDATES }, (_, index) => index + 1).map((count) => (
-                <option key={count} value={count}>
-                  {count}개 · 480p
-                </option>
-              ))}
-            </Select>
+
+        <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_11rem]">
+          {preview ? (
+            <Field
+              label={<span id="count-label">시안 개수</span>}
+              hint="후보마다 별도로 과금됩니다. 시드를 지정하면 후보마다 1씩 늘려 보냅니다."
+            >
+              <ChipGroup
+                ariaLabelledBy="count-label"
+                value={String(previewCount)}
+                onChange={(value) => set({ previewCount: Number(value) })}
+                options={Array.from({ length: PREVIEW_MAX_CANDIDATES }, (_, index) => ({
+                  value: String(index + 1),
+                  label: `${index + 1}개`,
+                }))}
+              />
+            </Field>
+          ) : (
+            <Field label={<span id="resolution-label">해상도</span>}>
+              <ChipGroup
+                ariaLabelledBy="resolution-label"
+                value={resolution}
+                onChange={(value) => set({ resolution: value })}
+                options={RESOLUTION_OPTIONS}
+              />
+            </Field>
+          )}
+          <Field label="오디오 생성" htmlFor="audio-switch">
+            <Switch id="audio-switch" checked={audio} onChange={(checked) => set({ audio: checked })}>
+              {audio ? '켜짐' : '꺼짐 · 무음'}
+            </Switch>
           </Field>
-        ) : (
-          <Field label="해상도">
-            <Select value={resolution} onChange={(e) => set({ resolution: e.target.value })}>
-              <option value="480p">480p · 빠른 확인</option>
-              <option value="720p">720p · HD</option>
-              <option value="1080p">1080p · Full HD</option>
-            </Select>
-          </Field>
-        )}
-        <Field label="화면 비율">
-          <Select value={ratio} onChange={(e) => set({ ratio: e.target.value })}>
-            <option value="">입력에 따른 기본값</option>
-            <option>16:9</option>
-            <option>9:16</option>
-            <option>1:1</option>
-            <option>21:9</option>
-            <option>4:3</option>
-            <option>3:4</option>
-            <option value="adaptive">자동 맞춤 · adaptive</option>
-          </Select>
-        </Field>
-        <Field label="오디오 생성">
-          <Select value={String(audio)} onChange={(e) => set({ audio: e.target.value === 'true' })}>
-            <option value="true">켜기</option>
-            <option value="false">끄기 · 무음</option>
-          </Select>
+        </div>
+
+        <Field
+          label={<span id="ratio-label">화면 비율</span>}
+          hint={
+            ratioLocked
+              ? '첫·마지막 프레임 지정이나 영상 편집·연장은 입력의 비율을 따르므로 기본 또는 자동 맞춤만 사용할 수 있습니다.'
+              : undefined
+          }
+        >
+          <ChipGroup
+            ariaLabelledBy="ratio-label"
+            value={ratio}
+            onChange={(value) => set({ ratio: value })}
+            options={RATIO_OPTIONS.map((option) => ({
+              ...option,
+              disabled: ratioLocked && option.value !== '' && option.value !== 'adaptive',
+              title:
+                ratioLocked && option.value !== '' && option.value !== 'adaptive'
+                  ? '프레임 지정·영상 편집·연장에서는 사용할 수 없습니다.'
+                  : option.title,
+            }))}
+          />
         </Field>
       </div>
 
