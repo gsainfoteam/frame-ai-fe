@@ -457,23 +457,24 @@ export function GenerateBar() {
             {error || `주의: ${lengthWarning}`}
           </p>
         ) : null}
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-2.5">
-          <div className="min-w-0 flex-1 basis-48">
+        <div className="flex items-center gap-x-4 gap-y-2.5 max-[359px]:flex-wrap">
+          <div className="min-w-0 flex-1">
             <p className="text-sm font-semibold tabular-nums text-foreground">
               {estimate.ok ? `예상 ${total}` : '사전 견적 불가'}
               {estimate.ok ? (
-                <span className="ml-1.5 text-xs font-normal text-muted">
+                <span className="text-xs font-normal text-muted max-sm:block sm:ml-1.5">
                   {count > 1 ? `시안 ${count}개 · ` : ''}
                   {estimate.resolution} · {estimate.duration}초
                 </span>
               ) : null}
             </p>
-            <p className="mt-0.5 truncate text-xs text-muted" title={apiKey ? hint : undefined}>
+            {/* 입력 조건 안내는 모바일에서 숨겨 바를 한 줄로 유지합니다. API 키 안내는 항상 보입니다. */}
+            <p className={cn('mt-0.5 truncate text-xs text-muted', apiKey && 'max-sm:hidden')} title={apiKey ? hint : undefined}>
               {apiKey ? hint : '영상을 생성하려면 렛서 API 키가 필요합니다.'}
             </p>
           </div>
           {apiKey ? (
-            <Button variant="primary" size="lg" type="submit" className="w-full sm:w-auto sm:min-w-44" disabled={busy}>
+            <Button variant="primary" size="lg" type="submit" className="shrink-0 max-[359px]:w-full sm:min-w-44" disabled={busy}>
               {submitting
                 ? '접수 중…'
                 : uploads > 0
@@ -483,7 +484,7 @@ export function GenerateBar() {
                     : label}
             </Button>
           ) : (
-            <Button variant="primary" size="lg" className="w-full sm:w-auto sm:min-w-44" onClick={() => openKeyDialog(true)}>
+            <Button variant="primary" size="lg" className="shrink-0 max-[359px]:w-full sm:min-w-44" onClick={() => openKeyDialog(true)}>
               API 키 입력
             </Button>
           )}

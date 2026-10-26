@@ -49,14 +49,15 @@ export function Header() {
   }
 
   return (
-    <div className="mx-auto flex max-w-[1232px] flex-wrap items-center gap-x-3 gap-y-2 px-4 py-2.5 sm:px-6">
-      <Link to="/" aria-label="Frame 영상 스튜디오 홈" className="rounded-md no-underline text-foreground">
-        <BrandLogo />
+    // 모바일에서는 한 줄 높이(h-14)로 고정합니다. StudioLayout이 이 높이만큼 위로 밀어 탭만 남깁니다.
+    <div className="mx-auto flex h-14 max-w-[1232px] items-center gap-2 px-4 sm:h-auto sm:flex-wrap sm:gap-x-3 sm:gap-y-2 sm:px-6 sm:py-2.5">
+      <Link to="/" aria-label="Frame 영상 스튜디오 홈" className="shrink-0 rounded-md no-underline text-foreground">
+        <BrandLogo compact />
       </Link>
       <span aria-hidden="true" className="hidden h-5 w-px bg-line sm:block" />
-      <div className="flex min-w-0 items-center gap-2">
+      <div className="flex min-w-0 flex-1 items-center gap-2 sm:flex-none">
         <Select
-          containerClassName="w-[180px] sm:w-[220px]"
+          containerClassName="min-w-0 flex-1 sm:w-[220px] sm:flex-none"
           value={activeProjectId}
           aria-label="프로젝트"
           onChange={(e) => {
@@ -74,14 +75,24 @@ export function Header() {
           <span className="max-sm:sr-only">새 프로젝트</span>
         </Button>
       </div>
-      <div className="flex items-center gap-2 sm:ml-auto">
+      <div className="flex shrink-0 items-center gap-2 sm:ml-auto">
         <span className="hidden text-xs text-muted md:inline">{MODEL_LABEL}</span>
-        <Button size="sm" variant={apiKey ? 'default' : 'primary'} onClick={() => setKeyOpen(true)}>
+        <Button
+          size="sm"
+          variant={apiKey ? 'default' : 'primary'}
+          aria-label={apiKey ? 'API 키 연결됨' : 'API 키 입력'}
+          onClick={() => setKeyOpen(true)}
+        >
           <span
             aria-hidden="true"
             className={cn('size-1.5 rounded-full', apiKey ? 'bg-accent' : 'bg-white/80')}
           />
-          {apiKey ? 'API 키 연결됨' : 'API 키 입력'}
+          <span aria-hidden="true" className="sm:hidden">
+            API
+          </span>
+          <span aria-hidden="true" className="max-sm:hidden">
+            {apiKey ? 'API 키 연결됨' : 'API 키 입력'}
+          </span>
         </Button>
         <a
           href={API_DOCS_URL}

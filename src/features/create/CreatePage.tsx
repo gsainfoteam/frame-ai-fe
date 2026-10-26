@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { ResultMedia } from '@/api/types'
 import { Button } from '@/shared/ui/Button'
 import { Card, CardHeader } from '@/shared/ui/Card'
@@ -311,6 +311,16 @@ function ResultPanel() {
   const media = useWorkspaceStore((s) => s.media)
   const preview = useWorkspaceStore((s) => s.preview)
   const polling = useWorkspaceStore((s) => s.polling)
+  const panelRef = useRef<HTMLElement>(null)
+  const shownJob = useRef(jobId)
+  // 한 열 레이아웃(모바일·태블릿)에서는 결과가 폼 아래에 있으므로, 새 작업이 잡히면 결과로 스크롤합니다.
+  useEffect(() => {
+    if (!jobId || jobId === shownJob.current) return
+    shownJob.current = jobId
+    if (window.matchMedia('(min-width: 1024px)').matches) return
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    panelRef.current?.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' })
+  }, [jobId])
   const badge =
     status === '생성 완료'
       ? 'succeeded'
@@ -321,7 +331,7 @@ function ResultPanel() {
           : 'idle'
 
   return (
-    <aside className="scrollbar-slim lg:sticky lg:top-[calc(var(--app-header-h)+1.25rem)] lg:max-h-[calc(100svh-var(--app-header-h)-2.5rem)] lg:self-start lg:overflow-y-auto lg:pr-1">
+    <aside ref={panelRef} className="scrollbar-slim scroll-mt-14 lg:sticky lg:top-[calc(var(--app-header-h)+1.25rem)] lg:max-h-[calc(100svh-var(--app-header-h)-2.5rem)] lg:self-start lg:overflow-y-auto lg:pr-1">
       <Card>
         <CardHeader title="생성 결과" className="mb-3" actions={<StatusBadge status={badge}>{status}</StatusBadge>} />
         <div className="flex aspect-video min-h-44 items-center justify-center overflow-hidden rounded-md border border-line bg-viewer">
