@@ -17,6 +17,24 @@ export function redactRequest(body: VideoGenerationRequest) {
   return out
 }
 
+/** 공급사가 오류 메시지에 되돌려 준 입력 원문·URL·인증 토큰도 복사본에서 제거합니다. */
+export function redactErrorMessage(message: string, body: VideoGenerationRequest | null) {
+  let safe = message
+  if (body && 'prompt' in body && body.prompt) {
+    // 공급사 JSON이 error.message 문자열 안에 중첩되는 경우도 처리합니다.
+    let prompt = body.prompt
+    for (let depth = 0; depth < 4; depth++) {
+      safe = safe.split(prompt).join('[프롬프트 생략]')
+      prompt = JSON.stringify(prompt).slice(1, -1)
+    }
+  }
+  return safe
+    .replace(/\\+\//g, '/')
+    .replace(/Bearer\s+[^\s"'<>\\]+/gi, 'Bearer [키 생략]')
+    .replace(/\bsk-[a-zA-Z0-9_-]+/g, '[키 생략]')
+    .replace(/(?:https?:\/\/|blob:|frame-local:\/\/|data:)[^\s"'<>\\]+/gi, '[URL 생략]')
+}
+
 /**
  * 렛서 문의용 정보 (FAQ·오류 처리 문서): 스페이스 이름, 계정 이메일, 발생 시각, 엔드포인트, HTTP 상태,
  * `type` 또는 `error.code`, `error_ref`, 작업 ID. API 키와 인증 헤더는 넣지 않습니다.
@@ -65,13 +83,14 @@ function openRouterDiagnostics({ record, failure }: { record?: JobRecord; failur
     lines.push(`엔드포인트: ${failure.endpoint}`)
     lines.push(`HTTP 상태: ${failure.status ?? '응답 없음 (연결 실패·시간 초과)'}`)
     if (failure.code) lines.push(`오류 코드: ${failure.code}`)
+    if (failure.message) lines.push(`오류 메시지: ${redactErrorMessage(failure.message, body)}`)
   } else if (record) {
     lines.push(`엔드포인트: GET /api/v1/videos/${record.id}`)
     lines.push(`작업 상태: ${record.status}`)
     if (record.error?.code) lines.push(`error.code: ${record.error.code}`)
-    if (record.error?.message) lines.push(`error.message: ${record.error.message}`)
+    if (record.error?.message) lines.push(`error.message: ${redactErrorMessage(record.error.message, body)}`)
   }
-  lines.push('요청 본문 (일부 생략):')
+  lines.push('앱 내부 요청 설정 (OpenRouter 전송 형식으로 변환 전 · 일부 생략):')
   lines.push(body ? JSON.stringify(redactRequest(body), null, 2) : '(이 기기에 기록 없음)')
   return lines.join('\n')
 }
