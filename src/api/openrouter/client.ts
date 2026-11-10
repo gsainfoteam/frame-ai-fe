@@ -14,7 +14,7 @@ import { createRequester } from '@/api/http'
 import { FRAME_DOWNLOAD_TIMEOUT_MS, IMAGE_MIMES, isAllowedMime } from '@/config/constants'
 import { openRouterApiBase } from '@/config/env'
 import { openRouterHint } from '@/domain/errors'
-import type { OpenRouterVideoModel } from '@/domain/models'
+import { requiresOpenRouterAudio, type OpenRouterVideoModel } from '@/domain/models'
 import { createId } from '@/shared/lib/id'
 import { LOCAL_IMAGE_SCHEME, isLocalImageRef } from '@/shared/lib/url'
 import { imageRepository } from '@/storage/imageRepository'
@@ -139,7 +139,10 @@ export async function toOpenRouterBody(payload: GenerationRequest) {
     }
   }
 
-  const body: Record<string, unknown> = { model: payload.model, prompt: payload.prompt, generate_audio: payload.generate_audio }
+  const body: Record<string, unknown> = { model: payload.model, prompt: payload.prompt }
+  // 기존 기록에 generate_audio=false가 남아 있어도 필수 오디오 모델에는 false를 보내지 않습니다.
+  if (requiresOpenRouterAudio(payload.model)) body.generate_audio = true
+  else if (payload.generate_audio !== undefined) body.generate_audio = payload.generate_audio
   if (payload.duration !== undefined) body.duration = payload.duration
   if (payload.resolution) body.resolution = payload.resolution
   if (payload.aspect_ratio) body.aspect_ratio = payload.aspect_ratio

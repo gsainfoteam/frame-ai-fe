@@ -31,7 +31,8 @@ export type GenerationRequest = {
   /** 렛서는 480p·720p·1080p, OpenRouter는 모델이 지원하는 값(768p, 4K 등) */
   resolution?: string
   aspect_ratio?: string
-  generate_audio: boolean
+  /** 생략하면 모델의 기본 오디오 동작을 사용합니다. */
+  generate_audio?: boolean
   seed?: number
   watermark?: boolean
   return_last_frame?: boolean

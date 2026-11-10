@@ -10,7 +10,7 @@ import type {
 import { asGenerationRequest, isFinalizeRequest } from '@/api/types'
 import { GATEWAYS } from '@/api/gateway'
 import { MODEL_ID, PENDING_VIDEO_URL, REF_LIMITS } from '@/config/constants'
-import { acceptsMediaReferences, capabilitiesFor, durationLabel, modelCapabilities, type ModelSpec } from '@/domain/models'
+import { acceptsMediaReferences, capabilitiesFor, durationLabel, generationAudio, modelCapabilities, type ModelSpec } from '@/domain/models'
 import { isLocalImageRef, validRef } from '@/shared/lib/url'
 
 export type DraftReference = {
@@ -84,8 +84,9 @@ export function buildPayload(draft: PayloadDraft): GenerationRequest {
     prompt: [draft.useCommon ? draft.commonPrompt.trim() : '', draft.scenePrompt.trim()]
       .filter(Boolean)
       .join('\n\n'),
-    generate_audio: spec.audio && draft.generateAudio,
   }
+  const audio = generationAudio(spec, draft.generateAudio)
+  if (audio !== undefined) payload.generate_audio = audio
   // 시안은 resolution을 생략해 480p를 적용합니다. 1080p에 draft만 붙이면 400입니다.
   if (draft.preview && caps.draft) payload.draft = true
   else if (draft.resolution) payload.resolution = draft.resolution

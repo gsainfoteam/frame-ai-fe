@@ -155,6 +155,22 @@ export function durationLabel(spec: ModelSpec) {
   return contiguous && list.length > 2 ? `${list[0]}–${list[list.length - 1]}초` : `${list.join('·')}초`
 }
 
+/** 모델 목록의 generate_audio=false는 무음이라는 뜻이 아니라 설정을 노출하지 않는다는 뜻입니다. */
+export function requiresOpenRouterAudio(model: string) {
+  return model === 'heygen/heygen-video-1'
+}
+
+export function modelAudioMode(spec: ModelSpec): 'optional' | 'required' | 'default' | 'off' {
+  if (spec.gateway === 'openrouter' && requiresOpenRouterAudio(spec.id)) return 'required'
+  if (spec.audio) return 'optional'
+  return spec.gateway === 'openrouter' ? 'default' : 'off'
+}
+
+export function generationAudio(spec: ModelSpec, requested: boolean): boolean | undefined {
+  const mode = modelAudioMode(spec)
+  return mode === 'required' ? true : mode === 'optional' ? requested : mode === 'off' ? false : undefined
+}
+
 /**
  * 영상·오디오 참조를 반영하는 모델. 렛서 Seedance는 둘 다, 렛서 Kling은 옴니 모델이 영상만 받습니다.
  * OpenRouter 공식 문서는 Seedance 2 이상만 영상·오디오 참조를 반영한다고 안내합니다.
@@ -185,7 +201,7 @@ export function modelTags(spec: ModelSpec) {
   return [
     durationLabel(spec),
     resolutionRange(spec.resolutions),
-    spec.audio ? '오디오' : null,
+    modelAudioMode(spec) === 'required' ? '오디오 항상 포함' : spec.audio ? '오디오' : null,
     frames,
     acceptsMediaReferences(spec, 'video') ? '영상 참조' : null,
   ].filter((tag): tag is string => Boolean(tag))

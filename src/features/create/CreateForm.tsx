@@ -19,7 +19,7 @@ import { ReferenceCard } from '@/features/create/ReferenceEditor'
 import { CostEstimate } from '@/features/create/CostEstimate'
 import { useCostSummary } from '@/features/create/useCostSummary'
 import { useActiveModel } from '@/features/create/useActiveModel'
-import { acceptsMediaReferences, durationLabel, type ModelSpec } from '@/domain/models'
+import { acceptsMediaReferences, durationLabel, modelAudioMode, type ModelSpec } from '@/domain/models'
 import { ModelPicker } from '@/features/create/ModelPicker'
 import { useModelStore } from '@/stores/modelStore'
 import { downloadJson } from '@/shared/lib/download'
@@ -260,6 +260,7 @@ export function GenerationSettings() {
   )
   const { gateway, caps, spec, models, status, error: modelError, unavailable, pendingSelection } = useActiveModel()
   const continuityReady = lastFrame === 'true' && store === 'true'
+  const audioMode = modelAudioMode(spec)
   const preview = caps.draft && generation === 'preview'
   const seedance = spec.kind === 'seedance'
   const editMode = caps.videoModes && mode === 'edit'
@@ -420,12 +421,17 @@ export function GenerationSettings() {
           )}
           <Field
             label="오디오 생성"
-            htmlFor="audio-switch"
-            hint={spec.audio ? undefined : `${spec.label}은(는) 오디오 생성 여부를 고를 수 없습니다.`}
+            htmlFor={audioMode === 'optional' ? 'audio-switch' : undefined}
           >
-            <Switch id="audio-switch" checked={spec.audio && audio} disabled={!spec.audio} onChange={(checked) => set({ audio: checked })}>
-              {spec.audio && audio ? '켜짐' : '꺼짐 · 무음'}
-            </Switch>
+            {audioMode === 'optional' ? (
+              <Switch id="audio-switch" checked={audio} onChange={(checked) => set({ audio: checked })}>
+                {audio ? '켜짐' : '꺼짐 · 무음'}
+              </Switch>
+            ) : (
+              <p className="py-2 text-sm text-muted">
+                {audioMode === 'required' ? '항상 포함 · 끌 수 없음' : audioMode === 'default' ? '모델 기본값 · 변경 불가' : '무음 · 오디오 미지원'}
+              </p>
+            )}
           </Field>
         </div>
 
