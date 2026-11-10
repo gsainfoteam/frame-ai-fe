@@ -4,6 +4,9 @@ import type { GatewayId } from '@/api/gateway'
 import { ROLES } from '@/config/constants'
 import { modelCapabilities, type ModelSpec } from '@/domain/models'
 import { createId } from '@/shared/lib/id'
+import { loadWorkspaceDraft, saveWorkspaceDraft, serializeWorkspaceDraft } from '@/storage/workspaceRepository'
+import { useProjectStore } from '@/stores/projectStore'
+import { useSessionStore } from '@/stores/sessionStore'
 
 export type ReferenceDraft = {
   id: string
@@ -48,6 +51,9 @@ export type ContinuationSession = {
 }
 
 type WorkspaceState = {
+  draftProjectId: string
+  draftGateway: GatewayId
+  storageFailed: boolean
   useCommon: boolean
   useShared: boolean
   prompt: string
@@ -121,7 +127,7 @@ export const emptyWorkspaceResult = {
   jobId: '',
   status: '준비',
   cost: '비용 미확정',
-  notice: '생성 요청이 접수되면 10~30초 간격으로 진행 상태를 확인합니다.',
+  notice: '완성된 영상은 여기에서 확인하고 저장할 수 있습니다.',
   noticeError: false,
   rawResponse: '아직 응답이 없습니다.',
   media: [] as ResultMedia[],
@@ -144,20 +150,31 @@ export function newReference(initial?: Partial<ReferenceDraft>): ReferenceDraft 
   }
 }
 
-export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
+const inputDefaults = {
   ...sceneDefaults,
   model: '',
   generation: 'direct' as GenerationKind,
   previewCount: 1,
   duration: '',
   customDuration: 8,
-  resolution: '480p',
+  resolution: '720p',
   ratio: '',
   audio: true,
   seed: '',
   watermark: '',
   lastFrame: '',
   store: '',
+}
+
+const initialProject = useProjectStore.getState().currentProject()
+const initialDraft = loadWorkspaceDraft(initialProject.id)
+if (initialDraft.draft) useSessionStore.getState().setGateway(initialDraft.draft.draftGateway)
+
+export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
+  ...inputDefaults,
+  draftProjectId: initialProject.id,
+  draftGateway: useSessionStore.getState().gateway,
+  storageFailed: initialDraft.failed,
   submitting: false,
   uploads: 0,
   polling: false,
@@ -166,6 +183,8 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   submitBlock: null,
   lastSubmission: null,
   ...emptyWorkspaceResult,
+  ...initialDraft.draft,
+  sharedReferences: initialProject.references.map((ref) => newReference(ref)),
   set: (patch) => set(patch),
   resetScene: () =>
     set({
@@ -231,3 +250,39 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     return changed
   },
 }))
+
+// 프로젝트별 작성 내용을 저장합니다. 재생 URL과 실행 중 플래그는 복원하지 않습니다.
+useWorkspaceStore.subscribe((state, previous) => {
+  try {
+    const serialized = serializeWorkspaceDraft(state)
+    if (state.draftProjectId === previous.draftProjectId && serialized === serializeWorkspaceDraft(previous)) return
+    saveWorkspaceDraft(state.draftProjectId, serialized)
+    if (state.storageFailed) useWorkspaceStore.setState({ storageFailed: false })
+  } catch {
+    if (!state.storageFailed) useWorkspaceStore.setState({ storageFailed: true })
+  }
+})
+
+useSessionStore.subscribe((state, previous) => {
+  if (state.gateway !== previous.gateway) useWorkspaceStore.setState({ draftGateway: state.gateway })
+})
+
+useProjectStore.subscribe((state, previous) => {
+  if (state.activeProjectId === previous.activeProjectId) return
+  const project = state.currentProject()
+  const loaded = loadWorkspaceDraft(project.id)
+  useWorkspaceStore.setState({
+    ...inputDefaults,
+    ...emptyWorkspaceResult,
+    draftProjectId: project.id,
+    draftGateway: useSessionStore.getState().gateway,
+    ...loaded.draft,
+    sharedReferences: project.references.map((ref) => newReference(ref)),
+    storageFailed: loaded.failed,
+    continuation: null,
+    finalizeTarget: null,
+    lastSubmission: null,
+    polling: false,
+  })
+  useSessionStore.getState().setGateway(useWorkspaceStore.getState().draftGateway)
+})

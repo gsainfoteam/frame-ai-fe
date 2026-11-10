@@ -23,6 +23,7 @@ import {
 import { formatUsage } from '@/domain/usage'
 import { playableUrl, safeUrl, validRef } from '@/shared/lib/url'
 import { rememberImage } from '@/storage/imageRepository'
+import { useModelStore } from '@/stores/modelStore'
 import { useProjectStore } from '@/stores/projectStore'
 import { useSessionStore } from '@/stores/sessionStore'
 import { toast } from '@/stores/toastStore'
@@ -91,6 +92,9 @@ async function shareableVideoUrl(mediaId: string) {
 
 export function JobProvider({ children }: { children: ReactNode }) {
   const navigate = useNavigate()
+  const keys = useSessionStore((s) => s.keys)
+  const projectId = useProjectStore((s) => s.activeProjectId)
+  const focusedId = useWorkspaceStore((s) => s.jobId)
 
   const showMedia = useCallback((url: string, kind: string, mediaId = '') => {
     useWorkspaceStore.getState().set({ preview: { url, kind, mediaId } })
@@ -171,6 +175,24 @@ export function JobProvider({ children }: { children: ReactNode }) {
     },
     [renderWatch],
   )
+
+  // 새로고침 후에는 접수된 작업을 조회만 합니다. 생성 요청을 재전송하지 않습니다.
+  useEffect(() => {
+    const records = useProjectStore.getState().records
+    for (const watch of Object.values(useJobWatchStore.getState().watches)) {
+      if (!keys[gatewayOfJob(watch.id)]) stopWatching(watch.id)
+    }
+    for (const record of records) {
+      if (keys[record.gateway ?? 'letsur'] && ['queued', 'running'].includes(record.status)) {
+        watchJob(record.id)
+      }
+    }
+    if (focusedId && keys[gatewayOfJob(focusedId)]) {
+      const existing = useJobWatchStore.getState().watches[focusedId]
+      if (existing && existing.phase !== 'error' && existing.phase !== 'stopped') renderWatch(existing)
+      else focusJob(focusedId)
+    }
+  }, [keys, projectId, focusedId, focusJob, renderWatch])
 
   const startPolling = useCallback(
     (id: string) => {
@@ -266,6 +288,11 @@ export function JobProvider({ children }: { children: ReactNode }) {
     let spec: ModelSpec
     try {
       const draft = currentDraft()
+      const modelState = useModelStore.getState()
+      if (draft.spec.gateway === 'openrouter' && workspace.model && modelState.status !== 'ready' &&
+          !modelState.openRouter.some((model) => model.id === workspace.model)) {
+        throw new Error('저장된 모델을 아직 확인하지 못했습니다. 모델 목록을 다시 불러온 뒤 생성해주세요.')
+      }
       spec = draft.spec
       payload = validatePayload(buildPayload(draft), spec)
       validateDraftInputs(draft)

@@ -2,7 +2,7 @@ import { API_DOCS_URL } from '@/config/constants'
 
 export type GatewayId = 'letsur' | 'openrouter'
 
-export const GATEWAY_IDS: GatewayId[] = ['letsur', 'openrouter']
+export const GATEWAY_IDS: GatewayId[] = ['openrouter', 'letsur']
 
 /** 게이트웨이마다 지원 여부가 다른 기능. 없으면 화면에서 숨기거나 비활성화합니다. */
 export type GatewayCapabilities = {

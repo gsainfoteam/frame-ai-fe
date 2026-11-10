@@ -72,7 +72,8 @@ function clearTimer(id: string) {
 
 /** 작업을 만든 게이트웨이. 이 기기에 기록이 없는 작업(ID로 조회)은 현재 선택한 게이트웨이로 봅니다. */
 export function gatewayOfJob(id: string): GatewayId {
-  return useProjectStore.getState().records.find((item) => item.id === id)?.gateway ?? useSessionStore.getState().gateway
+  const record = useProjectStore.getState().records.find((item) => item.id === id)
+  return record ? record.gateway ?? 'letsur' : useSessionStore.getState().gateway
 }
 
 export function videoApiForJob(id: string) {
