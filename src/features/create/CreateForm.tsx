@@ -275,13 +275,18 @@ export function GenerationSettings() {
         actions={
           caps.lastFrame ? (
             <Button
-              disabled={continuityReady}
+              aria-label="연속 장면 준비"
+              aria-pressed={continuityReady}
+              className={continuityReady ? 'border-primary bg-accent-soft text-accent' : undefined}
+              title={continuityReady ? '끄면 마지막 프레임 반환을 중지하고 결과 보관은 기본 설정으로 되돌립니다.' : '마지막 프레임 반환과 결과 보관을 함께 켭니다.'}
               onClick={() => {
-                set({ lastFrame: 'true', store: 'true' })
-                useWorkspaceStore.getState().setNotice('마지막 프레임 반환과 결과 보관을 켰습니다. 다음 생성부터 적용됩니다.')
+                set(continuityReady ? { lastFrame: 'false', store: '' } : { lastFrame: 'true', store: 'true' })
+                useWorkspaceStore.getState().setNotice(continuityReady
+                  ? '연속 장면 준비를 껐습니다. 마지막 프레임 반환을 중지하고 결과 보관은 기본 설정으로 되돌립니다. 다음 생성부터 적용됩니다.'
+                  : '마지막 프레임 반환과 결과 보관을 켰습니다. 다음 생성부터 적용됩니다.')
               }}
             >
-              {continuityReady ? '연속 장면 준비됨' : '연속 장면 준비'}
+              연속 장면 준비 <span className="ml-1 text-xs">{continuityReady ? '켜짐' : '꺼짐'}</span>
             </Button>
           ) : undefined
         }
