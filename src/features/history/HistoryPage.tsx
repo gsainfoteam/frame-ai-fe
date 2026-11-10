@@ -58,7 +58,7 @@ export function HistoryPage() {
         }
       />
 
-      <Disclosure label="백업 · 복원 안내" meta="API 키와 영상 파일은 저장하지 않습니다">
+      <Disclosure label="백업 · 복원 안내" meta="백업에는 API 키와 영상 원본이 포함되지 않습니다">
         <div className="flex flex-wrap items-center gap-2">
           <FileButton
             label="기록 JSON 가져오기"

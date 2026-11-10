@@ -60,10 +60,13 @@ export function httpHint(status: number, code?: string, raw = '') {
 }
 
 /** OpenRouter 오류 처리 문서 기준 HTTP 상태별 안내 */
-export function openRouterHint(status: number) {
+export function openRouterHint(status: number, code?: string, raw = '') {
+  if ([code, raw].some((value) => value?.includes('InputImageSensitiveContentDetected.PrivacyInformation'))) {
+    return '공급사가 입력 이미지를 실제 인물이 포함된 자료로 판단해 거절했습니다. Seedance 2·2.5는 실제 얼굴 이미지의 직접 입력을 제한합니다. 현재 Frame의 OpenRouter 연결은 인물 자산 등록·인증을 지원하지 않습니다. 길이·해상도 변경이나 같은 이미지 재전송으로 해결되지 않습니다. 인물 참조를 지원하는 모델·등록 경로를 확인하거나, 오탐이라면 이 오류 정보로 OpenRouter 지원에 문의하세요.'
+  }
   switch (status) {
     case 400:
-      return '요청 필드를 확인하세요. 모델이 지원하지 않는 길이·해상도·비율이면 오류 내용에 허용 값이 함께 옵니다.'
+      return '서버 오류 메시지를 확인하세요. 지원하지 않는 생성 옵션·참조 조합 또는 입력 콘텐츠 제한으로 요청이 거절될 수 있습니다.'
     case 401:
       return 'OpenRouter API 키 값을 확인하세요. 키가 삭제되었거나 비활성화되었을 수 있습니다.'
     case 402:
@@ -86,7 +89,8 @@ export function openRouterHint(status: number) {
   }
 }
 
-export function describeError(error: unknown) {
+export function describeError(error: unknown, gateway: 'letsur' | 'openrouter' = 'letsur') {
+  if (typeof error === 'string') return error
   const e = (error && typeof error === 'object' ? error : {}) as Record<string, unknown>
   const lines: string[] = []
   const labels: Array<[string, string]> = [
@@ -106,6 +110,7 @@ export function describeError(error: unknown) {
   }
 
   const raw = JSON.stringify(e)
+  if (gateway === 'openrouter') return lines.join('\n') || '요청 처리에 실패했습니다. 서버 응답을 확인해주세요.'
   if (/AspectRatioTooLarge|AspectRatioTooSmall/.test(raw)) {
     lines.push(
       '참조 이미지의 가로세로 비율이 공급사 자산 등록 조건을 벗어났습니다. 생성 영상의 화면 비율이 아니라 원본 이미지의 비율을 확인하세요. 이미지를 자르거나 여백을 추가해 비율을 바꾼 뒤 다시 업로드하고, 기존 참조도 새 참조로 교체해주세요. 같은 비율로 해상도만 줄이면 해결되지 않습니다. 정확한 허용 범위는 해당 공급사 등록 경로에서 확인해야 합니다.',

@@ -6,7 +6,7 @@ const controlClass =
   ' focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/15' +
   ' disabled:cursor-not-allowed disabled:bg-surface disabled:text-muted'
 
-const heightClass = 'h-9 px-2.5'
+const heightClass = 'h-10 px-3'
 
 export function Field({
   label,
@@ -24,7 +24,7 @@ export function Field({
   return (
     <div className={cn('min-w-0', className)}>
       {label ? (
-        <label htmlFor={htmlFor} className="mb-1.5 block text-sm font-medium">
+        <label htmlFor={htmlFor} className="mb-2 block text-sm font-medium">
           {label}
         </label>
       ) : null}
@@ -39,7 +39,7 @@ export function TextInput({ className, ...props }: InputHTMLAttributes<HTMLInput
 }
 
 export function TextArea({ className, ...props }: TextareaHTMLAttributes<HTMLTextAreaElement>) {
-  return <textarea className={cn(controlClass, 'min-h-28 resize-y px-2.5 py-2 leading-relaxed', className)} {...props} />
+  return <textarea className={cn(controlClass, 'min-h-28 resize-y p-3 leading-relaxed', className)} {...props} />
 }
 
 export function Select({

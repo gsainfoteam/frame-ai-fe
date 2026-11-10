@@ -1,5 +1,6 @@
 import { FILE_SIZE_MIB, MIME_BY_TYPE, ROLES, SEEDANCE_GUIDE_URL, isAllowedMime } from '@/config/constants'
 import { dimensionLabel, readImageDimensions, readMediaDuration } from '@/shared/lib/image'
+import { acceptsMediaReferences } from '@/domain/models'
 import { durationWarning, formatSeconds, imageWarnings } from '@/domain/inputChecks'
 import { Button } from '@/shared/ui/Button'
 import { FileButton } from '@/shared/ui/FileButton'
@@ -22,9 +23,10 @@ type Props = {
 
 export function ReferenceCard({ value, shared, onChange, onRemove }: Props) {
   const api = useVideoApi()
-  const { gateway, caps } = useActiveModel()
+  const { gateway, caps, spec } = useActiveModel()
   /** OpenRouter에는 업로드 API가 없어 이미지는 브라우저에 보관했다가 보낼 때 함께 넣습니다. */
   const canUpload = value.type === 'image' || caps.mediaUpload
+  const allowedRoles = ROLES[value.type].filter(([role]) => role !== 'first_frame' && role !== 'last_frame' || spec.frameImages.includes(role))
   const managed = caps.managedUpload && value.managed
   const uploadLabel = caps.mediaUpload ? '파일 업로드' : '브라우저에 보관'
   const bumpUploads = useWorkspaceStore((s) => s.bumpUploads)
@@ -105,8 +107,8 @@ export function ReferenceCard({ value, shared, onChange, onRemove }: Props) {
           onChange={(e) => setType(e.target.value as MediaKind)}
         >
           <option value="image">이미지</option>
-          <option value="video">영상</option>
-          <option value="audio">오디오</option>
+          <option value="video" disabled={!acceptsMediaReferences(spec, 'video')}>영상{!acceptsMediaReferences(spec, 'video') ? ' · 미지원' : ''}</option>
+          <option value="audio" disabled={!acceptsMediaReferences(spec, 'audio')}>오디오{!acceptsMediaReferences(spec, 'audio') ? ' · 미지원' : ''}</option>
         </Select>
         <Select
           containerClassName="min-w-[150px] flex-1"
@@ -115,7 +117,8 @@ export function ReferenceCard({ value, shared, onChange, onRemove }: Props) {
           disabled={busy}
           onChange={(e) => onChange({ role: e.target.value })}
         >
-          {ROLES[value.type].map(([role, label]) => (
+          {!allowedRoles.some(([role]) => role === value.role) ? <option value={value.role} disabled>이 모델에서 지원하지 않는 역할</option> : null}
+          {allowedRoles.map(([role, label]) => (
             <option key={role} value={role}>
               {label}
             </option>

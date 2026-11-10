@@ -10,14 +10,12 @@ import { useSessionStore } from '@/stores/sessionStore'
 import { useProjectStore } from '@/stores/projectStore'
 import { useWorkspaceStore } from '@/stores/workspaceStore'
 import { toast } from '@/stores/toastStore'
-import { loadWorkspaceForProject } from '@/features/create/draft'
-import { useJob } from '@/features/create/jobContext'
 import { useActiveModel, useModelSync } from '@/features/create/useActiveModel'
 import { isWatchActive, useJobWatchStore } from '@/features/jobs/jobWatcher'
 
 export function Header() {
-  const { stop } = useJob()
   const apiKey = useSessionStore((s) => s.apiKey)
+  const storageFailed = useSessionStore((s) => s.storageFailed)
   const keys = useSessionStore((s) => s.keys)
   const setGateway = useSessionStore((s) => s.setGateway)
   const setApiKey = useSessionStore((s) => s.setApiKey)
@@ -32,7 +30,7 @@ export function Header() {
   const [showKey, setShowKey] = useState(false)
   const [newOpen, setNewOpen] = useState(false)
   const [newName, setNewName] = useState('')
-  const { gateway, spec } = useActiveModel()
+  const { gateway } = useActiveModel()
   useModelSync()
 
   const switchGateway = (value: string) => {
@@ -59,20 +57,14 @@ export function Header() {
     }
     // 방금 만든 프로젝트로도 바로 전환해야 하므로 렌더 시점 목록이 아닌 최신 상태를 봅니다.
     if (!useProjectStore.getState().projects.some((p) => p.id === id)) return false
-    if ((workspace.prompt || workspace.references.length || workspace.imageUrl) && !confirm('프로젝트를 바꾸면 현재 개별 장면 설명과 참조를 비웁니다. 공통 설정과 생성 기록은 유지됩니다. 계속할까요?')) {
-      return false
-    }
-    stop()
     setActiveProjectId(id)
-    workspace.resetScene()
-    loadWorkspaceForProject()
-    toast('프로젝트를 전환했습니다. 새 장면 설명을 입력하세요.')
+    toast('프로젝트를 전환했습니다. 저장된 장면과 설정을 불러왔습니다.')
     return true
   }
 
   return (
     // 모바일에서는 한 줄 높이(h-14)로 고정합니다. StudioLayout이 이 높이만큼 위로 밀어 탭만 남깁니다.
-    <div className="mx-auto flex h-14 max-w-[1232px] items-center gap-2 px-4 sm:h-auto sm:flex-wrap sm:gap-x-3 sm:gap-y-2 sm:px-6 sm:py-2.5">
+    <div className="mx-auto flex h-14 max-w-[1440px] items-center gap-2 px-4 sm:h-auto sm:min-h-16 sm:flex-wrap sm:gap-x-4 sm:gap-y-2 sm:px-8 sm:py-3">
       <Link to="/" aria-label="Frame 영상 스튜디오 홈" className="shrink-0 rounded-md no-underline text-foreground">
         <BrandLogo compact />
       </Link>
@@ -92,19 +84,19 @@ export function Header() {
             </option>
           ))}
         </Select>
-        <Button size="sm" onClick={() => setNewOpen(true)} title="새 프로젝트 만들기">
+        <Button size="sm" variant="subtle" onClick={() => setNewOpen(true)} title="새 프로젝트 만들기">
           <span aria-hidden="true">＋</span>
           <span className="max-sm:sr-only">새 프로젝트</span>
         </Button>
       </div>
       <div className="flex shrink-0 items-center gap-2 sm:ml-auto">
-        <span className="hidden text-xs text-muted md:inline">
-          {gateway.label} · {spec.label}
+        <span className="hidden text-xs font-medium text-muted md:inline">
+          {gateway.label}
         </span>
         <Button
           size="sm"
           variant={apiKey ? 'default' : 'primary'}
-          aria-label={apiKey ? 'API 키 연결됨' : 'API 키 입력'}
+          aria-label={apiKey ? 'API 키 저장됨' : 'API 키 연결'}
           onClick={() => setKeyOpen(true)}
         >
           <span
@@ -115,7 +107,7 @@ export function Header() {
             API
           </span>
           <span aria-hidden="true" className="max-sm:hidden">
-            {apiKey ? 'API 키 연결됨' : 'API 키 입력'}
+            {apiKey ? 'API 키 저장됨' : 'API 키 연결'}
           </span>
         </Button>
         <a
@@ -131,7 +123,7 @@ export function Header() {
       <Dialog
         open={keyOpen}
         title="API 연결"
-        description="키는 저장하지 않고 이 페이지가 열린 동안만 사용합니다."
+        description="API 키를 이 브라우저에 자동 저장해 다음 방문에도 사용합니다."
         onClose={() => setKeyOpen(false)}
         footer={
           <>
@@ -142,7 +134,7 @@ export function Header() {
                 setShowKey(false)
               }}
             >
-              키 지우기
+              저장된 키 지우기
             </Button>
             <Button
               variant="primary"
@@ -157,10 +149,10 @@ export function Header() {
       >
         <Field
           className="mb-4"
-          label="게이트웨이"
-          hint="새 생성 요청을 보낼 곳입니다. 이미 만든 작업은 만든 게이트웨이로 조회하므로 두 키를 모두 입력해 둘 수 있습니다."
+          label="연결 서비스"
+          hint="새 생성 요청을 보낼 곳입니다. 이미 만든 작업은 해당 서비스로 조회하므로 두 키를 모두 입력해 둘 수 있습니다."
         >
-          <div className="grid grid-cols-2 gap-1 rounded-md border border-line bg-surface p-1" role="radiogroup" aria-label="게이트웨이">
+          <div className="grid grid-cols-2 gap-1 rounded-md border border-line bg-surface p-1" role="radiogroup" aria-label="연결 서비스">
             {GATEWAY_IDS.map((id) => (
               <button
                 key={id}
@@ -195,6 +187,16 @@ export function Header() {
             </Button>
           </div>
         </Field>
+        <p className="mt-3 text-xs text-muted">
+          키는 이 기기의 브라우저에 저장되며, 선택한 서비스의 API 호출에 사용됩니다.
+          공용 기기에서는 사용 후 저장된 키를 지워주세요. 프로젝트 백업에는 키가 포함되지 않습니다.
+        </p>
+        {gateway.id === 'openrouter' ? (
+          <a className="mt-2 inline-block text-xs" href="https://openrouter.ai/settings/keys" target="_blank" rel="noopener noreferrer">
+            OpenRouter API 키 발급·사용 한도 설정 ↗
+          </a>
+        ) : null}
+        {storageFailed ? <p role="alert" className="mt-3 text-sm text-danger">키를 브라우저에 저장하지 못했습니다. 저장 공간과 사이트 저장 권한을 확인해주세요.</p> : null}
       </Dialog>
 
       <Dialog

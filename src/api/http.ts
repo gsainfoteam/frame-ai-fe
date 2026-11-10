@@ -55,7 +55,7 @@ export function createRequester({ gateway, base, getKey, headers: extra, hint }:
         const payload = json as { error?: unknown }
         const code = extractErrorCode(json)
         const note = hint(res.status, code, raw)
-        throw new GatewayApiError(`HTTP ${res.status} · ${describeError(payload.error ?? json)}${note ? `\n${note}` : ''}`, {
+        throw new GatewayApiError(`HTTP ${res.status} · ${describeError(payload.error ?? json, gateway)}${note ? `\n${note}` : ''}`, {
           gateway,
           status: res.status,
           code,

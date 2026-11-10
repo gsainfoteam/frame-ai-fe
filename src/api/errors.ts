@@ -47,6 +47,7 @@ export function extractErrorCode(payload: unknown): string | undefined {
   const { root, error } = errorObject(payload)
   for (const value of [error?.code, root?.code, root?.type, error?.type]) {
     if (typeof value === 'string' && value) return value
+    if (typeof value === 'number' && Number.isFinite(value)) return String(value)
   }
   return undefined
 }

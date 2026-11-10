@@ -11,7 +11,7 @@ type Props = ButtonHTMLAttributes<HTMLButtonElement> & {
 }
 
 const variants: Record<Variant, string> = {
-  default: 'border border-line-strong bg-panel text-foreground shadow-card hover:bg-button',
+  default: 'border border-input-border bg-panel text-foreground hover:border-line-strong hover:bg-button',
   primary: 'border border-transparent bg-primary text-white font-semibold shadow-card hover:bg-primary-hover',
   subtle: 'border border-transparent bg-transparent text-muted hover:bg-button hover:text-foreground',
   danger: 'border border-danger-line bg-danger-soft text-danger hover:border-danger',
@@ -19,7 +19,7 @@ const variants: Record<Variant, string> = {
 
 const sizes: Record<Size, string> = {
   sm: 'h-8 gap-1 rounded-md px-2.5 text-xs',
-  md: 'h-9 gap-1.5 rounded-md px-3 text-sm',
+  md: 'h-10 gap-1.5 rounded-md px-3 text-sm',
   lg: 'h-11 gap-2 rounded-lg px-4 text-base',
 }
 

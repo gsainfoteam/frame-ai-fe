@@ -1,11 +1,15 @@
 import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from 'react'
+import { Link } from 'react-router'
 import { modelParts, modelTags, type ModelSpec } from '@/domain/models'
+import { portraitPolicy } from '@/domain/modelPolicies'
 import { cn } from '@/shared/lib/cn'
+import { ProviderLogo } from '@/shared/ui/ProviderLogo'
 
 /** 목록이 이보다 길면 검색 칸을 보여 줍니다. */
 const SEARCH_THRESHOLD = 8
 
 function Tags({ spec, className }: { spec: ModelSpec; className?: string }) {
+  const policy = portraitPolicy(spec)
   return (
     <span className={cn('flex flex-wrap gap-1', className)}>
       {modelTags(spec).map((tag) => (
@@ -13,6 +17,11 @@ function Tags({ spec, className }: { spec: ModelSpec; className?: string }) {
           {tag}
         </span>
       ))}
+      {policy ? (
+        <span className="rounded bg-amber-50 px-1.5 py-px text-2xs font-medium text-amber-900 ring-1 ring-inset ring-amber-200">
+          {policy.label}
+        </span>
+      ) : null}
     </span>
   )
 }
@@ -55,6 +64,8 @@ export function ModelPicker({ id, value, models, onChange, unavailable = () => f
   const triggerRef = useRef<HTMLButtonElement>(null)
   const searchRef = useRef<HTMLInputElement>(null)
   const listId = useId()
+  const policyId = useId()
+  const policy = portraitPolicy(value)
   /** 고르거나 Esc로 닫았을 때만 선택 상자로 초점을 돌려줍니다. 바깥을 눌러 닫으면 그대로 둡니다. */
   const [refocus, setRefocus] = useState(0)
   const searchable = models.length > SEARCH_THRESHOLD
@@ -148,6 +159,7 @@ export function ModelPicker({ id, value, models, onChange, unavailable = () => f
   const current = modelParts(value)
 
   return (
+    <>
     <div ref={rootRef} className="relative" onKeyDown={onKeyDown}>
       <button
         ref={triggerRef}
@@ -156,15 +168,17 @@ export function ModelPicker({ id, value, models, onChange, unavailable = () => f
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-controls={open ? listId : undefined}
+        aria-describedby={policy ? policyId : undefined}
         onClick={() => (open ? setOpen(false) : openList())}
         className={cn(
-          'flex w-full min-w-0 cursor-pointer items-center gap-3 rounded-md border border-input-border bg-input px-3 py-2 text-left transition-colors',
+          'flex w-full min-w-0 cursor-pointer items-center gap-3 rounded-lg border border-input-border bg-input px-4 py-3 text-left transition-colors',
           'hover:border-line-strong focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/15',
           open && 'border-primary ring-2 ring-primary/15',
         )}
       >
+        <ProviderLogo spec={value} />
         <span className="min-w-0 flex-1">
-          <span className="flex min-w-0 items-baseline gap-1.5">
+          <span className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
             <span className="truncate text-md font-semibold text-foreground">{current.name}</span>
             <span className="shrink-0 text-xs text-faint">{current.provider}</span>
           </span>
@@ -230,6 +244,7 @@ export function ModelPicker({ id, value, models, onChange, unavailable = () => f
                           blocked && 'cursor-not-allowed opacity-50',
                         )}
                       >
+                        <ProviderLogo spec={spec} className="mt-0.5" />
                         <span className="min-w-0 flex-1">
                           <span className={cn('block text-sm font-medium', selected ? 'text-accent' : 'text-foreground')}>{name}</span>
                           {blocked ? (
@@ -252,5 +267,16 @@ export function ModelPicker({ id, value, models, onChange, unavailable = () => f
         </div>
       ) : null}
     </div>
+    <div aria-live="polite" aria-atomic="true">
+      {policy ? (
+        <div id={policyId} className="mt-2 flex items-center gap-2 text-xs leading-5">
+          <span className="font-medium text-amber-900">{policy.label}</span>
+          <Link to="/help#guide-5" aria-label="인물 참조 정책 자세히 보기" className="shrink-0 text-muted underline decoration-line-strong underline-offset-2 hover:text-accent focus-visible:outline-2 focus-visible:outline-offset-2">
+            자세히 보기 ↗
+          </Link>
+        </div>
+      ) : null}
+    </div>
+    </>
   )
 }

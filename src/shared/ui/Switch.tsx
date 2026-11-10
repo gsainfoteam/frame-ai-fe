@@ -22,7 +22,7 @@ export function Switch({ id, checked, disabled, onChange, children, className }:
       disabled={disabled}
       onClick={() => onChange(!checked)}
       className={cn(
-        'flex h-8 w-full cursor-pointer items-center justify-between gap-3 rounded-md border border-line bg-surface px-2.5 text-sm transition-colors hover:border-line-strong disabled:cursor-not-allowed disabled:opacity-50',
+        'flex h-9 w-full cursor-pointer items-center justify-between gap-3 rounded-md px-1 text-sm transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-50',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30',
         className,
       )}

@@ -56,12 +56,12 @@ export function ChipGroup<T extends string>({ options, value, onChange, ariaLabe
             disabled={option.disabled}
             onClick={() => onChange(option.value)}
             className={cn(
-              'inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-md border px-2.5 text-sm tabular-nums transition-colors',
+              'inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-md border px-3 text-sm tabular-nums transition-colors',
               'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30',
               'disabled:cursor-not-allowed disabled:opacity-40',
               selected
-                ? 'border-primary bg-accent-soft font-medium text-accent'
-                : 'border-line bg-surface text-muted hover:border-line-strong hover:text-foreground',
+                ? 'border-primary bg-accent-soft font-semibold text-accent'
+                : 'border-line bg-panel text-muted hover:border-line-strong hover:bg-surface hover:text-foreground',
             )}
           >
             {option.label}

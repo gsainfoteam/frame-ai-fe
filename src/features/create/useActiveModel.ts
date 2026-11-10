@@ -36,6 +36,7 @@ export function useActiveModel() {
     /** 렛서에서 이 스페이스에 없는 것으로 확인된 모델 */
     unavailable: (id: string) => letsur && letsurAvailable !== null && !letsurAvailable.includes(id),
     status: letsur ? 'ready' : status,
+    pendingSelection: !letsur && Boolean(modelId) && !list.some((item) => item.id === modelId) && status !== 'ready',
     error,
   }
 }
@@ -45,9 +46,16 @@ export function useActiveModel() {
  * 항상 그려지는 헤더에서 한 번만 씁니다.
  */
 export function useModelSync() {
-  const { spec } = useActiveModel()
+  const { spec, pendingSelection, status } = useActiveModel()
+  const projectId = useWorkspaceStore((s) => s.draftProjectId)
+  const modelId = useWorkspaceStore((s) => s.model)
   useEffect(() => {
+    if (pendingSelection || (spec.gateway === 'openrouter' && status !== 'ready')) return
+    if (status === 'ready' && modelId !== spec.id) {
+      useWorkspaceStore.getState().set({ model: spec.id })
+      if (modelId) toast('이전에 선택한 모델을 찾지 못해 기본 모델로 변경했습니다.')
+    }
     const changed = useWorkspaceStore.getState().fitToModel(spec)
     if (changed.length) toast(`${spec.label}에서 지원하지 않는 ${changed.join('·')} 설정을 기본값으로 바꿨습니다.`)
-  }, [spec])
+  }, [spec, pendingSelection, status, projectId, modelId])
 }

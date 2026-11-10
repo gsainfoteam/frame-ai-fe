@@ -2,24 +2,24 @@
 
 :root {
   /* surfaces */
-  --background: #f4f7f3;
+  --background: #f6f7f9;
   --panel: #ffffff;
-  --surface: #f8faf6;
-  --surface-strong: #eef3ea;
-  --viewer: #e9eee7;
+  --surface: #f8f9fb;
+  --surface-strong: #eef0f3;
+  --viewer: #f1f3f6;
 
   /* text */
-  --foreground: #1b2a20;
-  --muted: #5c6b61;
-  --faint: #7c8a80;
+  --foreground: #20262e;
+  --muted: #606975;
+  --faint: #697380;
 
   /* lines */
-  --line: #dee5dc;
-  --line-strong: #c6d2c5;
+  --line: #e5e8ed;
+  --line-strong: #cdd3dc;
 
   /* brand */
   --accent: #256b43;
-  --accent-soft: #e7f0e6;
+  --accent-soft: #edf7f0;
   --primary: #2f7048;
   --primary-hover: #245939;
 
@@ -30,12 +30,12 @@
 
   /* controls */
   --input: #ffffff;
-  --input-border: #c6d2c5;
-  --placeholder: #90a094;
-  --button: #eef3eb;
-  --button-hover: #e3ecdf;
+  --input-border: #d5dbe3;
+  --placeholder: #697380;
+  --button: #f1f3f6;
+  --button-hover: #e9edf2;
   /* 상단 고정 영역(헤더 + 탭) 높이. sticky 요소의 top 오프셋 기준으로 씁니다. */
-  --app-header-h: 6.5rem;
+  --app-header-h: 7rem;
 }
 
 @theme inline {
@@ -70,8 +70,8 @@
   --radius-lg: 0.75rem;
   --radius-xl: 1rem;
 
-  --shadow-card: 0 1px 2px #1b2a200a, 0 1px 1px #1b2a2008;
-  --shadow-pop: 0 10px 30px #1b2a2014, 0 2px 8px #1b2a200f;
+  --shadow-card: 0 2px 6px #20262e04;
+  --shadow-pop: 0 16px 40px #20262e14, 0 2px 8px #20262e0a;
 
   --font-sans: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Pretendard",
     "Malgun Gothic", system-ui, sans-serif;
@@ -120,9 +120,11 @@ h4 {
   line-height: 1.35;
 }
 
-a {
-  color: var(--accent);
-  text-underline-offset: 2px;
+@layer base {
+  a {
+    color: var(--accent);
+    text-underline-offset: 2px;
+  }
 }
 
 :focus-visible {
@@ -157,8 +159,89 @@ dialog {
 }
 
 dialog::backdrop {
-  background: #16241b66;
+  background: #20262e66;
   backdrop-filter: blur(2px);
+}
+
+.preview-stage {
+  background-color: var(--surface);
+  background-image: radial-gradient(#cbd2dc 0.7px, transparent 0.7px);
+  background-size: 16px 16px;
+}
+
+/* Markdown 사용 설명서. 폼 UI의 글자 크기와 문서 본문의 읽기 간격을 분리합니다. */
+@layer components {
+  .guide-content {
+    font-size: 0.9375rem;
+    line-height: 1.85;
+  }
+  .guide-content h2 {
+    scroll-margin-top: calc(var(--app-header-h) + 1.5rem);
+    margin-top: 3.5rem;
+    margin-bottom: 1.25rem;
+    padding-top: 1.75rem;
+    border-top: 1px solid var(--line);
+    font-size: 1.5rem;
+  }
+  .guide-content h3 {
+    margin-top: 2rem;
+    margin-bottom: 0.75rem;
+    font-size: 1.125rem;
+  }
+  .guide-content p {
+    margin-block: 1rem;
+  }
+  .guide-content > p:first-child {
+    margin-top: 0;
+    color: var(--muted);
+    font-size: 1rem;
+  }
+  .guide-content a {
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+  .guide-content a:hover {
+    color: var(--primary-hover);
+  }
+  .guide-content ul, .guide-content ol {
+    margin-block: 1rem;
+    padding-left: 1.5rem;
+  }
+  .guide-content ul { list-style-type: disc; }
+  .guide-content ol { list-style-type: decimal; }
+  .guide-content li { padding-left: 0.25rem; margin-block: 0.6rem; }
+  .guide-content li::marker { color: var(--accent); font-weight: 600; }
+  .guide-content blockquote {
+    margin-block: 1.5rem;
+    border-left: 3px solid var(--primary);
+    border-radius: 0 0.5rem 0.5rem 0;
+    background: var(--accent-soft);
+    padding: 0.1rem 1.25rem;
+  }
+  .guide-content code {
+    border-radius: 0.25rem;
+    background: var(--surface-strong);
+    padding: 0.15rem 0.3rem;
+    font-size: 0.875em;
+  }
+  .guide-content em {
+    display: block;
+    color: var(--muted);
+    font-size: 0.8125rem;
+    font-style: normal;
+  }
+  .guide-content img { margin-top: 1.5rem; }
+  .guide-table {
+    margin-block: 1.5rem;
+    overflow-x: auto;
+    border: 1px solid var(--line);
+    border-radius: 0.5rem;
+  }
+  .guide-table table { width: 100%; min-width: 440px; font-size: 0.875rem; line-height: 1.7; }
+  .guide-table th, .guide-table td { padding: 0.8rem 1rem; text-align: left; vertical-align: top; }
+  .guide-table th { background: var(--surface); font-weight: 600; }
+  .guide-table td { border-top: 1px solid var(--line); }
+  .guide-table td:first-child { min-width: 7rem; font-weight: 500; }
 }
 
 @keyframes toast-in {

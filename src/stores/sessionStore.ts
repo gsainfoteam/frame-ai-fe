@@ -1,25 +1,13 @@
 import { create } from 'zustand'
-import { isGatewayId, type GatewayId } from '@/api/gateway'
-
-const GATEWAY_KEY = 'frame.gateway'
-
-function loadGateway(): GatewayId {
-  try {
-    const saved = localStorage.getItem(GATEWAY_KEY)
-    return isGatewayId(saved) ? saved : 'letsur'
-  } catch {
-    return 'letsur'
-  }
-}
+import type { GatewayId } from '@/api/gateway'
+import { loadSession, saveSession } from '@/storage/sessionRepository'
 
 type SessionState = {
-  /** 새 생성 요청을 보낼 게이트웨이. 이름만 브라우저에 기억합니다. */
   gateway: GatewayId
-  /** 게이트웨이별 키. 저장하지 않고 이 페이지가 열린 동안만 씁니다. */
+  /** 이 브라우저에 저장합니다. 프로젝트 백업·진단 정보에는 포함하지 않습니다. */
   keys: Record<GatewayId, string>
-  /** 현재 게이트웨이의 키 */
   apiKey: string
-  /** 키가 필요한 자리에서 바로 입력 대화상자를 열 수 있게 세션에 둡니다. */
+  storageFailed: boolean
   keyDialogOpen: boolean
   setGateway: (gateway: GatewayId) => void
   setApiKey: (value: string) => void
@@ -27,22 +15,28 @@ type SessionState = {
   setKeyDialogOpen: (open: boolean) => void
 }
 
-const initialGateway = loadGateway()
+const initial = loadSession()
 
 export const useSessionStore = create<SessionState>((set, get) => ({
-  gateway: initialGateway,
-  keys: { letsur: '', openrouter: '' },
-  apiKey: '',
+  ...initial,
+  apiKey: initial.keys[initial.gateway],
   keyDialogOpen: false,
-  setGateway: (gateway) => {
-    try {
-      localStorage.setItem(GATEWAY_KEY, gateway)
-    } catch {
-      /* 기억하지 못해도 이번 세션에는 적용됩니다. */
-    }
-    set({ gateway, apiKey: get().keys[gateway] })
+  setGateway: (gateway) => set({ gateway, apiKey: get().keys[gateway] }),
+  setApiKey: (value) => {
+    const apiKey = value.trim()
+    set({ apiKey, keys: { ...get().keys, [get().gateway]: apiKey } })
   },
-  setApiKey: (apiKey) => set({ apiKey, keys: { ...get().keys, [get().gateway]: apiKey } }),
-  clearKey: () => set({ apiKey: '', keys: { ...get().keys, [get().gateway]: '' } }),
+  clearKey: () => get().setApiKey(''),
   setKeyDialogOpen: (keyDialogOpen) => set({ keyDialogOpen }),
 }))
+
+useSessionStore.subscribe((state, previous) => {
+  if (state.gateway === previous.gateway && state.keys === previous.keys) return
+  let storageFailed = false
+  try {
+    saveSession(state)
+  } catch {
+    storageFailed = true
+  }
+  if (state.storageFailed !== storageFailed) useSessionStore.setState({ storageFailed })
+})
