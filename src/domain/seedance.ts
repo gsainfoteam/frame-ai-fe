@@ -12,6 +12,7 @@ import { GATEWAYS } from '@/api/gateway'
 import { MODEL_ID, PENDING_VIDEO_URL, REF_LIMITS } from '@/config/constants'
 import { acceptsMediaReferences, capabilitiesFor, durationLabel, generationAudio, modelCapabilities, type ModelSpec } from '@/domain/models'
 import { isLocalImageRef, validRef } from '@/shared/lib/url'
+import { validateModelConstraints } from '@/domain/modelConstraints'
 
 export type DraftReference = {
   type: MediaKind
@@ -243,6 +244,7 @@ export function validatePayload(payload: GenerationRequest, spec: ModelSpec) {
   if (payload.mode && !count.video) {
     throw new Error('영상 참고·편집·연장 방식에는 영상 참조가 필요합니다.')
   }
+  validateModelConstraints(payload, spec)
   if (payload.mode && !['reference', 'edit', 'extend'].includes(payload.mode)) {
     throw new Error('지원되지 않는 영상 사용 방식입니다.')
   }

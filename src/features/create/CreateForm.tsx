@@ -24,6 +24,7 @@ import { ModelPicker } from '@/features/create/ModelPicker'
 import { useModelStore } from '@/stores/modelStore'
 import { downloadJson } from '@/shared/lib/download'
 import { toKlingBody } from '@/api/letsur/kling'
+import { modelInputHint, requiredDuration } from '@/domain/modelConstraints'
 
 /** 고르기 쉬운 길이만 칩으로 두고, 나머지는 직접 입력으로 받습니다. */
 function durationPresets(spec: ModelSpec) {
@@ -238,6 +239,8 @@ function ratioOptions(spec: ModelSpec): ChipOption<string>[] {
 }
 
 export function GenerationSettings() {
+  const hasGeneralImages = useWorkspaceStore((s) => [...s.references, ...(s.useShared ? s.sharedReferences : [])]
+    .some((ref) => (!('type' in ref) || ref.type === 'image') && ref.role !== 'first_frame' && ref.role !== 'last_frame'))
   const duration = useWorkspaceStore((s) => s.duration)
   const customDuration = useWorkspaceStore((s) => s.customDuration)
   const resolution = useWorkspaceStore((s) => s.resolution)
@@ -261,6 +264,8 @@ export function GenerationSettings() {
   const { gateway, caps, spec, models, status, error: modelError, unavailable, pendingSelection } = useActiveModel()
   const continuityReady = lastFrame === 'true' && store === 'true'
   const audioMode = modelAudioMode(spec)
+  const fixedDuration = requiredDuration(spec, resolution, hasGeneralImages)
+  const inputHint = modelInputHint(spec)
   const preview = caps.draft && generation === 'preview'
   const seedance = spec.kind === 'seedance'
   const editMode = caps.videoModes && mode === 'edit'
@@ -362,6 +367,7 @@ export function GenerationSettings() {
         </Field>
       ) : null}
       <div className="space-y-5">
+        {inputHint ? <p className="text-xs text-muted">{inputHint} <Link className="text-accent underline underline-offset-2" to="/help#guide-4">자세히 보기 →</Link></p> : null}
         <Field
           label={<span id="duration-label">영상 길이</span>}
           hint={editMode ? '영상 편집은 입력 영상 길이를 유지하므로 기본 또는 자동만 사용할 수 있습니다.' : undefined}
@@ -372,7 +378,7 @@ export function GenerationSettings() {
             onChange={(value) => set({ duration: value })}
             options={durationOptions(spec).map((option) => ({
               ...option,
-              disabled: editMode && option.value !== '' && option.value !== '-1',
+              disabled: (editMode && option.value !== '' && option.value !== '-1') || (fixedDuration !== undefined && option.value !== '' && option.value !== String(fixedDuration)),
               title: editMode && option.value !== '' && option.value !== '-1' ? '영상 편집에서는 사용할 수 없습니다.' : option.title,
             }))}
           />
