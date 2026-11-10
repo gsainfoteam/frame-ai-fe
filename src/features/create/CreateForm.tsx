@@ -19,8 +19,9 @@ import { ReferenceCard } from '@/features/create/ReferenceEditor'
 import { CostEstimate } from '@/features/create/CostEstimate'
 import { useCostSummary } from '@/features/create/useCostSummary'
 import { useActiveModel } from '@/features/create/useActiveModel'
-import { durationLabel, type ModelSpec } from '@/domain/models'
+import { acceptsMediaReferences, durationLabel, type ModelSpec } from '@/domain/models'
 import { ModelPicker } from '@/features/create/ModelPicker'
+import { useModelStore } from '@/stores/modelStore'
 import { downloadJson } from '@/shared/lib/download'
 import { toKlingBody } from '@/api/letsur/kling'
 
@@ -28,6 +29,16 @@ import { toKlingBody } from '@/api/letsur/kling'
 function durationPresets(spec: ModelSpec) {
   if (spec.durations.length <= 8) return { presets: spec.durations, custom: false }
   return { presets: [5, 10, 15, 20, 30].filter((value) => spec.durations.includes(value)), custom: true }
+}
+
+const PROMPT_STARTERS = [
+  { label: '제품 디테일', prompt: '밝은 스튜디오의 흰 받침대 위에 놓인 유리 향수병. 카메라가 천천히 가까워지며 유리 표면의 반사와 섬세한 질감을 포착한다. 부드러운 측면 조명, 정제된 제품 광고 분위기.' },
+  { label: '시네마틱 풍경', prompt: '이른 아침, 옅은 안개가 내려앉은 푸른 숲. 카메라가 나무 사이를 천천히 지나가고 햇빛이 잎사귀 사이로 스며든다. 바람에 흔들리는 가지, 평온한 영화의 한 장면.' },
+  { label: '인물 클로즈업', prompt: '창가에 앉은 사람이 책에서 눈을 들어 카메라를 바라보며 미소 짓는다. 따뜻한 자연광, 얕은 심도, 눈높이의 고정 카메라. 자연스럽고 편안한 일상의 순간.' },
+]
+
+function SectionTitle({ step, children }: { step: string; children: string }) {
+  return <span className="flex items-center gap-2.5"><span className="flex size-6 items-center justify-center rounded bg-accent-soft font-mono text-xs font-medium text-accent">{step}</span>{children}</span>
 }
 
 export function SceneForm() {
@@ -48,25 +59,35 @@ export function SceneForm() {
   const { caps, spec } = useActiveModel()
 
   return (
-    <Card>
-      <CardHeader title="장면 설명" description="이 장면에만 적용되는 프롬프트와 참조입니다." />
+    <Card className="rounded-none border-0 bg-transparent shadow-none">
+      <CardHeader title={<SectionTitle step="01">장면 설명</SectionTitle>} />
       <Field
-        label="어떤 장면을 만들까요?"
+        label="장면 프롬프트"
         htmlFor="prompt"
         hint="피사체, 움직임, 카메라, 분위기와 소리를 구체적으로 적어주세요."
       >
         <TextArea
           id="prompt"
           required
-          className="min-h-40"
-          placeholder="예: 이른 아침의 고요한 숲. 나뭇잎 사이로 햇빛이 내려오고 옅은 안개가 흐른다."
+          className="min-h-36 rounded-lg bg-surface/60 p-4 text-base focus:bg-panel"
+          placeholder="어떤 장면을 담고 싶나요? 피사체와 움직임, 카메라의 시선을 적어보세요."
           value={prompt}
           onChange={(e) => set({ prompt: e.target.value })}
         />
       </Field>
 
-      <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-md border border-line bg-surface px-3 py-2.5">
-        <span className="text-xs font-medium text-muted">프로젝트 공통 설정 적용</span>
+      {!prompt ? (
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <span className="text-xs text-muted">예시로 시작</span>
+          {PROMPT_STARTERS.map((starter) => (
+            <button key={starter.label} type="button" className="cursor-pointer rounded-md border border-line bg-panel px-2.5 py-1.5 text-xs text-muted transition-colors hover:border-primary hover:bg-accent-soft hover:text-accent" onClick={() => { set({ prompt: starter.prompt }); document.getElementById('prompt')?.focus() }}>
+              {starter.label} <span aria-hidden="true">↗</span>
+            </button>
+          ))}
+        </div>
+      ) : null}
+
+      <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2">
         <Checkbox label="공통 프롬프트" checked={useCommon} onChange={(e) => set({ useCommon: e.target.checked })} />
         <Checkbox label="공통 이미지" checked={useShared} onChange={(e) => set({ useShared: e.target.checked })} />
         <Link to="/project" className="ml-auto text-xs text-muted transition-colors hover:text-accent">
@@ -75,14 +96,14 @@ export function SceneForm() {
       </div>
 
       <Disclosure
-        className="mt-3"
+        className="mt-4"
         label="이미지 · 영상 · 오디오 참조"
         meta={references.length ? `${references.length}개 추가됨` : '없음'}
         open={refOpen}
         onToggle={(open) => set({ refOpen: open })}
       >
         <div className="space-y-4">
-          <div>
+          {spec.frameImages.includes('first_frame') || imageUrl ? <div>
             <Field label="첫 프레임 이미지 URL (선택)" htmlFor="firstFrameUrl">
               <TextInput
                 id="firstFrameUrl"
@@ -109,7 +130,7 @@ export function SceneForm() {
                 onChange={(e) => set({ imagePerson: e.target.checked })}
               />
             ) : null}
-          </div>
+          </div> : null}
 
           <div>
             {references.length ? (
@@ -237,7 +258,7 @@ export function GenerationSettings() {
       s.references.some((ref) => ref.role === 'first_frame' || ref.role === 'last_frame') ||
       (s.useShared && s.sharedReferences.some((ref) => ref.role === 'first_frame' || ref.role === 'last_frame')),
   )
-  const { caps, spec, models, status, error: modelError, unavailable } = useActiveModel()
+  const { gateway, caps, spec, models, status, error: modelError, unavailable, pendingSelection } = useActiveModel()
   const continuityReady = lastFrame === 'true' && store === 'true'
   const preview = caps.draft && generation === 'preview'
   const seedance = spec.kind === 'seedance'
@@ -247,14 +268,10 @@ export function GenerationSettings() {
   const watermarkSupported = supportsWatermark(spec)
 
   return (
-    <Card>
+    <Card className="rounded-none border-0 border-t border-line bg-transparent shadow-none">
       <CardHeader
-        title="생성 설정"
-        description={
-          caps.lastFrame
-            ? '연속 장면 준비를 켜면 마지막 프레임 반환과 결과 보관을 함께 설정합니다.'
-            : `${spec.label}이(가) 지원하는 길이·해상도·비율만 고를 수 있습니다.`
-        }
+        title={<SectionTitle step="02">모델과 출력 설정</SectionTitle>}
+        description={`${gateway.label}에서 사용할 모델과 영상 규격을 선택하세요.`}
         actions={
           caps.lastFrame ? (
             <Button
@@ -271,14 +288,14 @@ export function GenerationSettings() {
       />
       {caps.modelPicker ? (
         <Field
-          className="mb-4"
-          label="모델"
+          className="mb-5"
+          label="영상 모델"
           htmlFor="model"
           hint={
             status === 'loading'
               ? 'OpenRouter 모델 목록을 불러오는 중입니다.'
               : status === 'error'
-                ? `${modelError} 기본 모델(${spec.label})로 진행합니다.`
+                ? pendingSelection ? '저장된 모델을 확인하지 못했습니다. 목록을 다시 불러와주세요.' : `${modelError} 기본 모델(${spec.label})로 진행합니다.`
                 : unavailable(spec.id)
                   ? '현재 키의 스페이스에서 이 모델을 찾지 못했습니다. 에셋 화면에서 이용 권한을 확인하세요.'
                   : undefined
@@ -291,6 +308,14 @@ export function GenerationSettings() {
             unavailable={unavailable}
             onChange={(id) => set({ model: id })}
           />
+          {status === 'error' ? <Button className="mt-2" size="sm" onClick={() => void useModelStore.getState().loadOpenRouter()}>모델 목록 다시 불러오기</Button> : null}
+          <p className="mt-2 text-xs text-muted">
+            {pendingSelection ? '저장된 모델과 옵션은 목록 확인 전까지 유지됩니다.' : [
+              spec.frameImages.includes('first_frame') ? '첫 프레임 지원' : '첫 프레임 미지원',
+              acceptsMediaReferences(spec, 'video') ? '영상 참조 지원' : null,
+              acceptsMediaReferences(spec, 'audio') ? '오디오 참조 지원' : null,
+            ].filter(Boolean).join(' · ')}
+          </p>
         </Field>
       ) : null}
       {caps.draft ? (
@@ -330,7 +355,7 @@ export function GenerationSettings() {
           </div>
         </Field>
       ) : null}
-      <div className="space-y-4">
+      <div className="space-y-5">
         <Field
           label={<span id="duration-label">영상 길이</span>}
           hint={editMode ? '영상 편집은 입력 영상 길이를 유지하므로 기본 또는 자동만 사용할 수 있습니다.' : undefined}
@@ -425,9 +450,9 @@ export function GenerationSettings() {
 
       <CostEstimate />
 
-      <Disclosure
+      {spec.seed || watermarkSupported || caps.lastFrame || caps.storeMedia ? <Disclosure
         className="mt-4"
-        label="고급 설정"
+        label="추가 옵션"
         meta={[spec.seed && '시드', watermarkSupported && '워터마크', caps.storeMedia && '결과 보관'].filter(Boolean).join(' · ') || '없음'}
       >
         <div className="grid gap-x-4 gap-y-3 sm:grid-cols-2">
@@ -466,7 +491,7 @@ export function GenerationSettings() {
             </Field>
           ) : null}
         </div>
-      </Disclosure>
+      </Disclosure> : null}
 
       <RequestPreview />
     </Card>
@@ -483,7 +508,7 @@ function RequestPreview() {
   const payload = draft.spec.kind?.startsWith('kling') ? toKlingBody(generic) : generic
 
   return (
-    <Disclosure className="mt-2.5" label="전송할 요청 JSON 확인">
+    <Disclosure className="mt-2.5" label="개발자용 · 요청 설정 JSON">
       <CodeBlock>{JSON.stringify(payload, null, 2)}</CodeBlock>
       <Button className="mt-2.5" onClick={() => downloadJson(payload, 'video-request.json')}>
         설정 JSON 저장
@@ -504,7 +529,7 @@ export function GenerateBar() {
   const blockedFor = useCountdown(useWorkspaceStore((s) => s.submitBlock))
   const apiKey = useSessionStore((s) => s.apiKey)
   const openKeyDialog = useSessionStore((s) => s.setKeyDialogOpen)
-  const { gateway } = useActiveModel()
+  const { gateway, pendingSelection } = useActiveModel()
   const { preview, count, estimate, total } = useCostSummary()
   const draft = currentDraft()
   const payload = buildPayload(draft)
@@ -521,11 +546,11 @@ export function GenerateBar() {
   )
   const lengthWarning = totalVideoWarning(videoSeconds)
   const label = preview ? (count > 1 ? `480p 시안 ${count}개 만들기 ↗` : '480p 시안 만들기 ↗') : '영상 생성 ↗'
-  const busy = submitting || uploads > 0 || blockedFor > 0
+  const busy = submitting || uploads > 0 || blockedFor > 0 || pendingSelection
 
   return (
-    <div className="sticky bottom-0 z-10 -mx-1 bg-gradient-to-t from-background via-background to-transparent px-1 pb-3 pt-5">
-      <div className="rounded-lg border border-line-strong bg-panel px-3 py-2.5 shadow-card sm:px-4 sm:py-3">
+    <div className="sticky bottom-0 z-10 rounded-b-xl border-t border-line bg-panel/95 p-4 shadow-[0_-4px_16px_#20262e05] backdrop-blur sm:px-6">
+      <div>
         {error || lengthWarning ? (
           <p
             className="scrollbar-slim mb-2.5 max-h-24 overflow-y-auto whitespace-pre-wrap rounded-md border border-danger-line bg-danger-soft px-2.5 py-1.5 text-xs text-danger"
@@ -556,7 +581,9 @@ export function GenerateBar() {
                 ? '접수 중…'
                 : uploads > 0
                   ? '업로드 중…'
-                  : blockedFor > 0
+                  : pendingSelection
+                    ? '저장된 모델 확인 중'
+                    : blockedFor > 0
                     ? `대기열 가득 참 · ${blockedFor}초 뒤`
                     : label}
             </Button>

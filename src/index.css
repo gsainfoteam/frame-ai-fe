@@ -2,24 +2,24 @@
 
 :root {
   /* surfaces */
-  --background: #f4f7f3;
+  --background: #f6f7f9;
   --panel: #ffffff;
-  --surface: #f8faf6;
-  --surface-strong: #eef3ea;
-  --viewer: #e9eee7;
+  --surface: #f8f9fb;
+  --surface-strong: #eef0f3;
+  --viewer: #f1f3f6;
 
   /* text */
-  --foreground: #1b2a20;
-  --muted: #5c6b61;
-  --faint: #7c8a80;
+  --foreground: #20262e;
+  --muted: #606975;
+  --faint: #697380;
 
   /* lines */
-  --line: #dee5dc;
-  --line-strong: #c6d2c5;
+  --line: #e5e8ed;
+  --line-strong: #cdd3dc;
 
   /* brand */
   --accent: #256b43;
-  --accent-soft: #e7f0e6;
+  --accent-soft: #edf7f0;
   --primary: #2f7048;
   --primary-hover: #245939;
 
@@ -30,12 +30,12 @@
 
   /* controls */
   --input: #ffffff;
-  --input-border: #c6d2c5;
-  --placeholder: #90a094;
-  --button: #eef3eb;
-  --button-hover: #e3ecdf;
+  --input-border: #d5dbe3;
+  --placeholder: #697380;
+  --button: #f1f3f6;
+  --button-hover: #e9edf2;
   /* 상단 고정 영역(헤더 + 탭) 높이. sticky 요소의 top 오프셋 기준으로 씁니다. */
-  --app-header-h: 6.5rem;
+  --app-header-h: 7rem;
 }
 
 @theme inline {
@@ -70,8 +70,8 @@
   --radius-lg: 0.75rem;
   --radius-xl: 1rem;
 
-  --shadow-card: 0 1px 2px #1b2a200a, 0 1px 1px #1b2a2008;
-  --shadow-pop: 0 10px 30px #1b2a2014, 0 2px 8px #1b2a200f;
+  --shadow-card: 0 2px 6px #20262e04;
+  --shadow-pop: 0 16px 40px #20262e14, 0 2px 8px #20262e0a;
 
   --font-sans: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Pretendard",
     "Malgun Gothic", system-ui, sans-serif;
@@ -120,9 +120,11 @@ h4 {
   line-height: 1.35;
 }
 
-a {
-  color: var(--accent);
-  text-underline-offset: 2px;
+@layer base {
+  a {
+    color: var(--accent);
+    text-underline-offset: 2px;
+  }
 }
 
 :focus-visible {
@@ -157,8 +159,14 @@ dialog {
 }
 
 dialog::backdrop {
-  background: #16241b66;
+  background: #20262e66;
   backdrop-filter: blur(2px);
+}
+
+.preview-stage {
+  background-color: var(--surface);
+  background-image: radial-gradient(#cbd2dc 0.7px, transparent 0.7px);
+  background-size: 16px 16px;
 }
 
 /* Markdown 사용 설명서. 폼 UI의 글자 크기와 문서 본문의 읽기 간격을 분리합니다. */

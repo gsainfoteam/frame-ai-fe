@@ -29,7 +29,7 @@ export function Disclosure({
     <details
       className={cn(
         'group',
-        variant === 'panel' && 'overflow-hidden rounded-md border border-line bg-surface',
+        variant === 'panel' && 'border-t border-line',
         className,
       )}
       open={open}
@@ -38,7 +38,7 @@ export function Disclosure({
       <summary
         className={cn(
           'flex cursor-pointer items-center gap-2 text-sm font-medium text-muted transition-colors hover:text-accent',
-          variant === 'panel' && 'px-3 py-2.5',
+          variant === 'panel' && 'py-3',
         )}
       >
         <svg
@@ -49,9 +49,9 @@ export function Disclosure({
           <path d="M4.5 2.5 8 6l-3.5 3.5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
         <span className="min-w-0 flex-1 truncate text-left">{label}</span>
-        {meta ? <span className="shrink-0 text-xs font-normal text-faint">{meta}</span> : null}
+        {meta ? <span className="max-w-[45%] truncate text-xs font-normal text-faint">{meta}</span> : null}
       </summary>
-      <div className={cn(variant === 'panel' ? 'border-t border-line bg-panel p-3' : 'pt-3')}>{children}</div>
+      <div className={cn(variant === 'panel' ? 'pb-3 pt-1' : 'pt-3')}>{children}</div>
     </details>
   )
 }

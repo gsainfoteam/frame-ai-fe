@@ -1,6 +1,7 @@
 import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import { modelParts, modelTags, type ModelSpec } from '@/domain/models'
 import { cn } from '@/shared/lib/cn'
+import { ProviderLogo } from '@/shared/ui/ProviderLogo'
 
 /** 목록이 이보다 길면 검색 칸을 보여 줍니다. */
 const SEARCH_THRESHOLD = 8
@@ -163,6 +164,7 @@ export function ModelPicker({ id, value, models, onChange, unavailable = () => f
           open && 'border-primary ring-2 ring-primary/15',
         )}
       >
+        <ProviderLogo spec={value} />
         <span className="min-w-0 flex-1">
           <span className="flex min-w-0 items-baseline gap-1.5">
             <span className="truncate text-md font-semibold text-foreground">{current.name}</span>
@@ -230,6 +232,7 @@ export function ModelPicker({ id, value, models, onChange, unavailable = () => f
                           blocked && 'cursor-not-allowed opacity-50',
                         )}
                       >
+                        <ProviderLogo spec={spec} className="mt-0.5" />
                         <span className="min-w-0 flex-1">
                           <span className={cn('block text-sm font-medium', selected ? 'text-accent' : 'text-foreground')}>{name}</span>
                           {blocked ? (

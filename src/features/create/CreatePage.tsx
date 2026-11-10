@@ -4,7 +4,6 @@ import { Button } from '@/shared/ui/Button'
 import { Card, CardHeader } from '@/shared/ui/Card'
 import { CodeBlock } from '@/shared/ui/CodeBlock'
 import { Disclosure } from '@/shared/ui/Disclosure'
-import { EmptyState } from '@/shared/ui/EmptyState'
 import { TextInput } from '@/shared/ui/Field'
 import { StatusBadge } from '@/shared/ui/StatusBadge'
 import { cn } from '@/shared/lib/cn'
@@ -22,23 +21,37 @@ import { copyText } from '@/shared/lib/clipboard'
 import { formatTimestamp } from '@/shared/lib/time'
 import { useProjectStore } from '@/stores/projectStore'
 import { GenerateBar, GenerationSettings, SceneForm } from '@/features/create/CreateForm'
+import { useActiveModel } from '@/features/create/useActiveModel'
 
 export function CreatePage() {
   const { generate } = useJob()
+  const storageFailed = useWorkspaceStore((s) => s.storageFailed)
   return (
-    <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1.1fr)_minmax(340px,0.9fr)]">
-      <form
-        className="space-y-4"
-        onSubmit={(event) => {
-          event.preventDefault()
-          void generate()
-        }}
-      >
-        <SceneForm />
-        <GenerationSettings />
-        <GenerateBar />
-      </form>
-      <ResultPanel />
+    <div>
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight sm:text-[28px]">영상 만들기</h1>
+          <p className="mt-1.5 text-sm text-muted">아이디어를 적고, 나만의 장면을 완성하세요.</p>
+        </div>
+        <p className={cn('flex items-center gap-2 text-xs', storageFailed ? 'text-danger' : 'text-muted')}>
+          <span aria-hidden="true" className={cn('size-1.5 rounded-full', storageFailed ? 'bg-danger' : 'bg-accent')} />
+          {storageFailed ? '브라우저 저장 확인 필요' : '작업 내용은 이 브라우저에 자동 저장'}
+        </p>
+      </div>
+      <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1.08fr)_minmax(0,1fr)]">
+        <form
+          className="min-w-0 rounded-xl border border-line bg-panel shadow-card"
+          onSubmit={(event) => {
+            event.preventDefault()
+            void generate()
+          }}
+        >
+          <SceneForm />
+          <GenerationSettings />
+          <GenerateBar />
+        </form>
+        <ResultPanel />
+      </div>
     </div>
   )
 }
@@ -218,7 +231,7 @@ function StatusStrip({ jobId }: { jobId: string }) {
           ? 'border-danger-line bg-danger-soft text-danger'
           : polling
             ? 'border-transparent bg-accent-soft text-accent'
-            : 'border-line bg-surface text-muted',
+            : 'border-transparent text-muted',
       )}
     >
       {polling && !noticeError ? <span className="mt-1.5 size-1.5 shrink-0 animate-pulse rounded-full bg-accent" /> : null}
@@ -342,8 +355,8 @@ function ResultPanel() {
   return (
     <aside ref={panelRef} className="scrollbar-slim scroll-mt-14 lg:sticky lg:top-[calc(var(--app-header-h)+1.25rem)] lg:max-h-[calc(100svh-var(--app-header-h)-2.5rem)] lg:self-start lg:overflow-y-auto lg:pr-1">
       <Card>
-        <CardHeader title="생성 결과" className="mb-3" actions={<StatusBadge status={badge}>{status}</StatusBadge>} />
-        <div className="flex aspect-video min-h-44 items-center justify-center overflow-hidden rounded-md border border-line bg-viewer">
+        <CardHeader title="생성 결과" className="mb-5" actions={<StatusBadge status={badge}>{status}</StatusBadge>} />
+        <div className={cn('flex items-center justify-center overflow-hidden rounded-lg', preview ? 'aspect-video min-h-44 bg-viewer' : 'preview-stage min-h-80 border border-line sm:aspect-[4/3]')}>
           {preview ? (
             preview.kind === 'video' || preview.kind === 'audio' ? (
               <video
@@ -363,7 +376,7 @@ function ResultPanel() {
               <img src={preview.url} alt="생성된 마지막 프레임" className="max-h-full max-w-full object-contain" />
             )
           ) : (
-            <EmptyState title="생성 결과 미리보기" body={'장면을 설명하고 생성하면\n여기에서 결과를 확인할 수 있어요.'} />
+            <PreviewPlaceholder />
           )}
         </div>
         <StatusStrip jobId={jobId.trim()} />
@@ -379,5 +392,39 @@ function ResultPanel() {
         <JobLookup jobId={jobId.trim()} />
       </Card>
     </aside>
+  )
+}
+
+/** 선택한 비율을 빈 캔버스에 보여 주되, 아직 생성된 영상은 없음을 명확히 합니다. */
+function PreviewPlaceholder() {
+  const ratio = useWorkspaceStore((s) => s.ratio)
+  const resolution = useWorkspaceStore((s) => s.resolution)
+  const polling = useWorkspaceStore((s) => s.polling)
+  const submitting = useWorkspaceStore((s) => s.submitting)
+  const status = useWorkspaceStore((s) => s.status)
+  const { spec } = useActiveModel()
+  const parts = ratio.split(':').map(Number)
+  const [w, h] = parts.length === 2 && parts.every((part) => Number.isFinite(part) && part > 0) ? parts : [16, 9]
+  const scale = Math.min(224 / w, 120 / h)
+  const width = w * scale
+  const height = h * scale
+  const x = (280 - width) / 2
+  const y = (156 - height) / 2
+  const busy = polling || submitting
+  const failed = status === '실패' || status === '입력 거절'
+  return (
+    <div className="w-full px-5 py-8 text-center">
+      <svg viewBox="0 0 280 156" className="mx-auto w-full max-w-64 text-accent" aria-hidden="true">
+        <rect x={x} y={y} width={width} height={height} rx="3" fill="white" stroke="currentColor" strokeOpacity="0.22" />
+        <path d={`M${x} ${y + 14}v-14h14 M${x + width - 14} ${y}h14v14 M${x} ${y + height - 14}v14h14 M${x + width - 14} ${y + height}h14v-14`} fill="none" stroke="currentColor" strokeWidth="2" />
+        <circle cx="140" cy="78" r="21" fill="var(--accent-soft)" />
+        <path d="m136 70 12 8-12 8z" fill="currentColor" />
+      </svg>
+      <p className="mt-3 text-base font-semibold tracking-tight">{busy ? '장면을 만드는 중입니다' : failed ? '장면을 완성하지 못했어요' : '이곳에서 장면이 완성됩니다'}</p>
+      <p className="mt-2 text-sm text-muted">{busy ? '진행 상태를 확인하고 있어요. 완료되면 여기에 표시됩니다.' : failed ? '아래 안내에서 원인을 확인해주세요.' : '장면과 설정을 정한 뒤 영상을 생성하세요.'}</p>
+      <div className="mt-5 flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-xs text-muted">
+        <span>{spec.label}</span><span aria-hidden="true">·</span><span>{resolution}</span><span aria-hidden="true">·</span><span>{ratio === 'adaptive' ? '자동 비율' : ratio || '기본 비율'}</span>
+      </div>
+    </div>
   )
 }
