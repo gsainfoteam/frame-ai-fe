@@ -122,6 +122,20 @@ Frame의 프로젝트는 **현재 브라우저 안의 작업 공간**입니다. 
 
 지원 모델과 옵션은 바뀔 수 있습니다. Frame은 OpenRouter의 모델 목록을 불러와 선택지를 표시합니다. 전체 지원 범위는 [OpenRouter 영상 생성 문서](https://openrouter.ai/docs/guides/overview/multimodal/video-generation)를 참고하세요.
 
+### 함께 사용할 수 없는 설정 조합
+
+길이와 해상도가 목록에 각각 표시되더라도 모든 조합을 지원하는 것은 아닙니다. Frame은 아래 조건을 생성 전에 검사합니다. 이전 설정을 불러왔을 때도 안내에 맞게 수정해주세요.
+
+| 모델 | 입력 조건과 해결 방법 |
+| --- | --- |
+| Hailuo 2.3 | **1080p는 6초만** 지원합니다. 길이를 6초 또는 기본으로 선택하세요. |
+| Seedance 2.0 / Fast / Mini | 일반 참조는 **이미지 9개·영상 3개·오디오 3개까지**입니다. 오디오를 참조하려면 일반 참조 이미지나 영상도 함께 넣으세요. Seedance 2.5의 개수 제한과 다릅니다. |
+| Veo 3.1 | 일반 참조 이미지는 **최대 3개**, 이때 길이는 **8초**입니다. 첫·끝 프레임 지정에는 이 일반 참조 조건을 적용하지 않습니다. |
+| Veo 3.1 Fast | 일반 참조 이미지는 **최대 3개**입니다. |
+| Veo 3.1 Lite / Seedance 1.5 Pro | 일반 참조 이미지 대신 이미지 역할을 **첫 프레임**으로 지정하세요. 끝 프레임을 쓰려면 첫 프레임도 필요합니다. |
+
+2026년 11월 10일 확인한 [MiniMax 입력 조건](https://platform.minimax.io/docs/api-reference/video-generation-i2v), [Seedance 입력 조건](https://docs.byteplus.com/en/docs/modelark/create-video-generation-task-api?redirect=1), [Veo 일반 참조 조건](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/video/generate-videos-from-references), [Veo 모델별 지원 범위](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/veo/3-1-generate)를 반영했습니다. 공급사 문서에 명시된 조건을 바탕으로 한 사전 검사이며, OpenRouter에서 모든 조합의 생성을 실측한 것은 아닙니다. 원격 파일의 형식·크기·재생 시간, 콘텐츠 심사, 계정 권한에 따른 오류는 서버 응답을 확인해야 합니다.
+
 ## 5. 이미지·영상·오디오 참고하기
 
 참조 자료는 AI에게 “어떤 외형이나 스타일을 참고할지” 알려주는 입력입니다. 프롬프트에는 그 자료가 **어떻게 움직일지**를 함께 설명하세요.

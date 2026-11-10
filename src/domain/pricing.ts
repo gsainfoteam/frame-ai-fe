@@ -1,5 +1,6 @@
 import type { GenerationRequest, Resolution } from '@/api/types'
 import { LETSUR_MODEL, type ModelSpec } from '@/domain/models'
+import { generalImageCount, requiredDuration } from '@/domain/modelConstraints'
 
 /**
  * 가이드 §7의 단가표(기준일 2026-09-28, unit / 100만 영상 토큰). 단가는 운영 상황에 따라 바뀔 수 있으므로
@@ -142,7 +143,8 @@ export function estimateOpenRouter(payload: GenerationRequest, spec: ModelSpec):
   const notes: string[] = []
   let duration = payload.duration
   if (duration === undefined) {
-    duration = spec.durations.includes(DEFAULT_DURATION) ? DEFAULT_DURATION : spec.durations[0]
+    duration = requiredDuration(spec, payload.resolution, generalImageCount(payload) > 0)
+      ?? (spec.durations.includes(DEFAULT_DURATION) ? DEFAULT_DURATION : spec.durations[0])
     notes.push(`길이를 모델 기본값으로 두면 ${duration}초로 가정합니다.`)
   }
   let resolution = payload.resolution
