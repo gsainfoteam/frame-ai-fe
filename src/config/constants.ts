@@ -76,4 +76,5 @@ export const WORKSPACES = [
   { id: 'project', path: '/project', label: '공통 설정' },
   { id: 'history', path: '/history', label: '생성 기록' },
   { id: 'images', path: '/library', label: '이미지 보관함' },
+  { id: 'help', path: '/help', label: '사용 가이드' },
 ] as const
