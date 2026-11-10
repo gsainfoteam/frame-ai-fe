@@ -152,6 +152,9 @@ export function estimateOpenRouter(payload: GenerationRequest, spec: ModelSpec):
   }
   const res = resolution.toLowerCase()
   const audio = payload.generate_audio
+  if (audio === undefined && Object.keys(skus).some((key) => /with_audio|without_audio/.test(key))) {
+    return { ok: false, reason: '모델의 기본 오디오 설정에 따라 단가가 달라 사전 견적을 낼 수 없습니다.' }
+  }
   const framed = Boolean(payload.image_url) || (payload.references ?? []).some((ref) => ref.type === 'image')
   const price = (key: string) => {
     const value = skus[key]
@@ -191,7 +194,7 @@ export function estimateOpenRouter(payload: GenerationRequest, spec: ModelSpec):
   }
 
   const mode = framed ? 'image_to_video' : 'text_to_video'
-  const audioTag = audio && spec.audio ? 'with_audio' : 'without_audio'
+  const audioTag = audio ? 'with_audio' : 'without_audio'
   const secondRate = pick([
     `duration_seconds_${audioTag}_${res}`,
     `${mode}_duration_seconds_${res}`,
@@ -199,7 +202,7 @@ export function estimateOpenRouter(payload: GenerationRequest, spec: ModelSpec):
     `cents_per_video_output_second_${res}`,
     `cents_per_second_output_${res}`,
     `duration_seconds_${audioTag}`,
-    ...(audio && spec.audio ? ['duration_seconds_with_audio'] : []),
+    ...(audio ? ['duration_seconds_with_audio'] : []),
     'duration_seconds',
     'cents_per_second_output',
   ])
