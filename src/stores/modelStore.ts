@@ -2,7 +2,15 @@ import { create } from 'zustand'
 import type { GatewayId } from '@/api/gateway'
 import { getVideoApi } from '@/api'
 import { fetchOpenRouterModels } from '@/api/openrouter/client'
-import { LETSUR_MODEL, LETSUR_MODELS, OPENROUTER_DEFAULT_MODEL, toModelSpec, type ModelSpec } from '@/domain/models'
+import {
+  LETSUR_MODEL,
+  LETSUR_MODELS,
+  OPENROUTER_DEFAULT_MODEL,
+  REPLICATE_MODELS,
+  REPLICATE_SEEDANCE_2_5,
+  toModelSpec,
+  type ModelSpec,
+} from '@/domain/models'
 
 /**
  * 목록을 받기 전에도 폼을 쓸 수 있도록 둔 기본 모델. 값은 2026-10 OpenRouter `/videos/models` 응답 기준이며
@@ -64,6 +72,7 @@ export const useModelStore = create<ModelState>((set, get) => ({
 /** 게이트웨이와 선택한 모델 ID로 지원 범위를 찾습니다. 빈 값이나 목록에 없는 ID는 기본 모델입니다. */
 export function resolveModel(gateway: GatewayId, modelId: string, list = useModelStore.getState().openRouter): ModelSpec {
   if (gateway === 'letsur') return LETSUR_MODELS.find((spec) => spec.id === modelId) ?? LETSUR_MODEL
+  if (gateway === 'replicate') return REPLICATE_MODELS.find((spec) => spec.id === modelId) ?? REPLICATE_SEEDANCE_2_5
   return (
     list.find((spec) => spec.id === modelId) ??
     list.find((spec) => spec.id === OPENROUTER_DEFAULT_MODEL) ??

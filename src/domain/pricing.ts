@@ -65,8 +65,22 @@ function framed(payload: GenerationRequest) {
   return Boolean(payload.image_url) || (payload.references ?? []).some((ref) => ref.role === 'first_frame' || ref.role === 'last_frame')
 }
 
+/**
+ * Replicate `bytedance/seedance-2.5` 공식 단가표(기준일 2026-11-22, USD / 출력 영상 초).
+ * https://replicate.com/bytedance/seedance-2.5#pricing
+ */
+export const REPLICATE_PRICING_AS_OF = '2026-11-22'
+
+const REPLICATE_PER_SECOND: Record<string, Record<'non_video_in' | 'video_in', Record<string, number>>> = {
+  'bytedance/seedance-2.5': {
+    non_video_in: { '480p': 0.1028, '720p': 0.2312 },
+    video_in: { '480p': 0.4304, '720p': 0.9676 },
+  },
+}
+
 export function estimateGeneration(payload: GenerationRequest, spec: ModelSpec = LETSUR_MODEL): Estimate {
   if (spec.gateway === 'openrouter') return estimateOpenRouter(payload, spec)
+  if (spec.gateway === 'replicate') return estimateReplicate(payload, spec)
   if (spec.kind !== 'seedance') {
     return {
       ok: false,
@@ -220,6 +234,44 @@ export function estimateOpenRouter(payload: GenerationRequest, spec: ModelSpec):
     }
   }
   return { ok: false, reason: '이 모델의 단가 형식을 해석하지 못했습니다. 완료 후 실제 사용량을 확인하세요.' }
+}
+
+/** Replicate 공식 모델 초당 단가로 계산한 예상 금액(USD). */
+export function estimateReplicate(payload: GenerationRequest, spec: ModelSpec): Estimate {
+  const table = REPLICATE_PER_SECOND[spec.id]
+  if (!table) {
+    return { ok: false, reason: '이 모델의 Replicate 단가 정보가 없습니다. 완료 후 Replicate 대시보드에서 실제 사용량을 확인하세요.' }
+  }
+  if (payload.duration === -1) {
+    return { ok: false, reason: '길이를 모델이 정하므로 사전 견적을 낼 수 없습니다. 완료 후 실제 사용량을 확인하세요.' }
+  }
+  const notes: string[] = []
+  let duration = payload.duration
+  if (duration === undefined) {
+    duration = spec.durations.includes(DEFAULT_DURATION) ? DEFAULT_DURATION : spec.durations[0]
+    notes.push(`길이를 모델 기본값으로 두면 ${duration}초로 가정합니다.`)
+  }
+  if (!Number.isInteger(duration) || !spec.durations.includes(duration)) {
+    return { ok: false, reason: '지원되는 영상 길이를 지정하면 예상 비용을 표시합니다.' }
+  }
+  let resolution = payload.resolution
+  if (!resolution) {
+    resolution = spec.resolutions.includes('720p') ? '720p' : spec.resolutions[0]
+    notes.push(`해상도를 모델 기본값으로 두면 ${resolution}로 가정합니다.`)
+  }
+  const hasVideo = (payload.references ?? []).some((ref) => ref.type === 'video')
+  const rate = table[hasVideo ? 'video_in' : 'non_video_in'][resolution]
+  if (rate === undefined) return { ok: false, reason: '이 해상도의 단가 정보가 없습니다.' }
+  if (hasVideo) notes.push('참조 영상 입력 단가(video_in)가 적용됩니다.')
+  return {
+    ok: true,
+    cost: duration * rate,
+    currency: 'USD',
+    rate: { value: `${rate.toFixed(4)} USD`, per: '초' },
+    resolution,
+    duration,
+    notes,
+  }
 }
 
 /**

@@ -1,8 +1,8 @@
 import { API_DOCS_URL } from '@/config/constants'
 
-export type GatewayId = 'letsur' | 'openrouter'
+export type GatewayId = 'letsur' | 'openrouter' | 'replicate'
 
-export const GATEWAY_IDS: GatewayId[] = ['openrouter', 'letsur']
+export const GATEWAY_IDS: GatewayId[] = ['openrouter', 'replicate', 'letsur']
 
 /** 게이트웨이마다 지원 여부가 다른 기능. 없으면 화면에서 숨기거나 비활성화합니다. */
 export type GatewayCapabilities = {
@@ -61,6 +61,23 @@ export const GATEWAYS: Record<GatewayId, GatewayInfo> = {
       draft: false,
       managedUpload: false,
       mediaUpload: false,
+      storeMedia: false,
+      lastFrame: false,
+      videoModes: false,
+      inquiry: false,
+      modelPicker: true,
+    },
+  },
+  replicate: {
+    id: 'replicate',
+    label: 'Replicate',
+    keyLabel: 'Replicate API Token',
+    keyPlaceholder: 'r8_…',
+    docsUrl: 'https://replicate.com/bytedance/seedance-2.5/api/schema',
+    capabilities: {
+      draft: false,
+      managedUpload: false,
+      mediaUpload: true,
       storeMedia: false,
       lastFrame: false,
       videoModes: false,

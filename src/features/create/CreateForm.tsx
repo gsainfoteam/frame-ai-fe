@@ -24,6 +24,7 @@ import { ModelPicker } from '@/features/create/ModelPicker'
 import { useModelStore } from '@/stores/modelStore'
 import { downloadJson } from '@/shared/lib/download'
 import { toKlingBody } from '@/api/letsur/kling'
+import { toReplicateBody } from '@/api/replicate/client'
 import { modelInputHint, requiredDuration } from '@/domain/modelConstraints'
 
 /** 고르기 쉬운 길이만 칩으로 두고, 나머지는 직접 입력으로 받습니다. */
@@ -109,7 +110,7 @@ export function SceneForm() {
               <TextInput
                 id="firstFrameUrl"
                 value={imageUrl}
-                placeholder={caps.mediaUpload ? 'https://… 또는 letsur-file://…' : 'https://…'}
+                placeholder={spec.gateway === 'letsur' ? 'https://… 또는 letsur-file://…' : 'https://…'}
                 onChange={(e) => set({ imageUrl: e.target.value, firstFramePreview: null })}
               />
             </Field>
@@ -269,8 +270,10 @@ export function GenerationSettings() {
   const preview = caps.draft && generation === 'preview'
   const seedance = spec.kind === 'seedance'
   const editMode = caps.videoModes && mode === 'edit'
-  // 렛서 Seedance는 입력 비율을 따르는 조합에서 고정 비율을 고를 수 없습니다 (Seedance 입력 방식 표).
-  const ratioLocked = seedance && (framed || mode === 'edit' || mode === 'extend')
+  // 렛서·Replicate Seedance는 입력 비율을 따르는 조합에서 고정 비율을 고를 수 없습니다.
+  const ratioLocked =
+    (seedance && (framed || mode === 'edit' || mode === 'extend')) ||
+    (spec.gateway === 'replicate' && spec.id === 'bytedance/seedance-2.5' && framed)
   const watermarkSupported = supportsWatermark(spec)
 
   return (
@@ -521,8 +524,12 @@ function RequestPreview() {
   useProjectStore()
   const draft = currentDraft()
   const generic = buildPayload(draft)
-  // 렛서 Kling은 필드 이름이 달라 실제로 보낼 본문으로 바꿔 보여 줍니다.
-  const payload = draft.spec.kind?.startsWith('kling') ? toKlingBody(generic) : generic
+  // 렛서 Kling과 Replicate는 필드 이름이 달라 실제로 보낼 본문으로 바꿔 보여 줍니다.
+  const payload = draft.spec.kind?.startsWith('kling')
+    ? toKlingBody(generic)
+    : draft.spec.gateway === 'replicate'
+      ? toReplicateBody(generic)
+      : generic
 
   return (
     <Disclosure className="mt-2.5" label="개발자용 · 요청 설정 JSON">

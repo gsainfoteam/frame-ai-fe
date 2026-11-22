@@ -20,6 +20,9 @@ export function requiredDuration(spec: ModelSpec, resolution: string | undefined
 }
 
 export function modelInputHint(spec: ModelSpec): string | undefined {
+  if (spec.gateway === 'replicate' && spec.id === 'bytedance/seedance-2.5') {
+    return '프롬프트에서 [Image1], [Video1], [Audio1]로 참조를 가리킬 수 있습니다. 오디오 참조는 이미지 또는 영상 참조와 함께 사용해야 합니다.'
+  }
   if (spec.gateway !== 'openrouter') return undefined
   if (spec.id === 'minimax/hailuo-2.3') return '1080p에서는 6초만 생성할 수 있습니다.'
   if (seedance20.has(spec.id)) return '참조는 이미지 9개·영상 3개·오디오 3개까지이며, 오디오만 참조할 수 없습니다.'
@@ -29,6 +32,16 @@ export function modelInputHint(spec: ModelSpec): string | undefined {
 }
 
 export function validateModelConstraints(payload: GenerationRequest, spec: ModelSpec) {
+  if (spec.gateway === 'replicate' && spec.id === 'bytedance/seedance-2.5') {
+    const refs = payload.references ?? []
+    const images = generalImageCount(payload)
+    const videos = refs.filter((ref) => ref.type === 'video').length
+    const audios = refs.filter((ref) => ref.type === 'audio').length
+    if (audios && !images && !videos) {
+      throw new Error(`${spec.label}에서 오디오를 참조하려면 일반 참조 이미지 또는 영상도 추가해주세요.`)
+    }
+    return
+  }
   if (spec.gateway !== 'openrouter') return
   const images = generalImageCount(payload)
   const duration = requiredDuration(spec, payload.resolution, images > 0)

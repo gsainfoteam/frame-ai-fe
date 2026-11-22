@@ -1,12 +1,11 @@
 import { ASSETS_PRICING_URL } from '@/config/constants'
-import { PRICING_AS_OF, formatEstimate } from '@/domain/pricing'
+import { PRICING_AS_OF, REPLICATE_PRICING_AS_OF, formatEstimate } from '@/domain/pricing'
 import { Disclosure } from '@/shared/ui/Disclosure'
 import { useCostSummary } from '@/features/create/useCostSummary'
 
 /** 생성 설정 안의 예상 비용 상세. 금액은 생성 바에도 보이므로 상세는 접어 둡니다. */
 export function CostEstimate() {
   const { count, estimate, finalize, total, spec } = useCostSummary()
-  const openRouter = spec.gateway === 'openrouter'
 
   return (
     <Disclosure className="mt-4" label="예상 비용 상세" meta={total ?? '사전 견적 불가'}>
@@ -16,9 +15,13 @@ export function CostEstimate() {
         ) : (
           <p className="text-lg font-semibold text-foreground">사전 견적 불가</p>
         )}
-        {openRouter ? (
+        {spec.gateway === 'openrouter' ? (
           <a href={`https://openrouter.ai/${spec.id}`} target="_blank" rel="noopener noreferrer" className="text-xs">
             OpenRouter 모델 목록 단가 기준 · 모델 페이지 ↗
+          </a>
+        ) : spec.gateway === 'replicate' ? (
+          <a href={`https://replicate.com/${spec.id}#pricing`} target="_blank" rel="noopener noreferrer" className="text-xs">
+            Replicate 단가 {REPLICATE_PRICING_AS_OF} 기준 · 모델 페이지 ↗
           </a>
         ) : (
           <a href={ASSETS_PRICING_URL} target="_blank" rel="noopener noreferrer" className="text-xs">

@@ -4,7 +4,7 @@ export const SESSION_KEY = 'frame.connection.v1'
 export type SavedSession = { gateway: GatewayId; keys: Record<GatewayId, string> }
 
 export function loadSession(): SavedSession & { storageFailed: boolean } {
-  const fallback: SavedSession = { gateway: 'openrouter', keys: { openrouter: '', letsur: '' } }
+  const fallback: SavedSession = { gateway: 'openrouter', keys: { openrouter: '', replicate: '', letsur: '' } }
   try {
     const raw = localStorage.getItem(SESSION_KEY)
     if (!raw) {
@@ -17,6 +17,7 @@ export function loadSession(): SavedSession & { storageFailed: boolean } {
       gateway: data.gateway,
       keys: {
         openrouter: typeof data.keys?.openrouter === 'string' ? data.keys.openrouter : '',
+        replicate: typeof data.keys?.replicate === 'string' ? data.keys.replicate : '',
         letsur: typeof data.keys?.letsur === 'string' ? data.keys.letsur : '',
       },
       storageFailed: false,

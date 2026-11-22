@@ -31,6 +31,7 @@ export function redactErrorMessage(message: string, body: VideoGenerationRequest
   return safe
     .replace(/\\+\//g, '/')
     .replace(/Bearer\s+[^\s"'<>\\]+/gi, 'Bearer [키 생략]')
+    .replace(/\b(?:sk|r8)_[a-zA-Z0-9_-]+/g, '[키 생략]')
     .replace(/\bsk-[a-zA-Z0-9_-]+/g, '[키 생략]')
     .replace(/(?:https?:\/\/|blob:|frame-local:\/\/|data:)[^\s"'<>\\]+/gi, '[URL 생략]')
 }
@@ -40,7 +41,9 @@ export function redactErrorMessage(message: string, body: VideoGenerationRequest
  * `type` 또는 `error.code`, `error_ref`, 작업 ID. API 키와 인증 헤더는 넣지 않습니다.
  */
 export function inquiryText({ record, failure }: { record?: JobRecord; failure?: SubmissionFailure | null }) {
-  if ((failure?.gateway ?? record?.gateway) === 'openrouter') return openRouterDiagnostics({ record, failure })
+  const gateway = failure?.gateway ?? record?.gateway
+  if (gateway === 'openrouter') return openRouterDiagnostics({ record, failure })
+  if (gateway === 'replicate') return replicateDiagnostics({ record, failure })
   const body = failure?.body ?? record?.request ?? null
   const rejected = failure?.status !== undefined && failure.status >= 400 && failure.status < 500
   const missingId = rejected ? '없음 (요청 거절됨 · 접수되지 않음)' : '받지 못함 (접수 여부 확인 필요)'
@@ -91,6 +94,31 @@ function openRouterDiagnostics({ record, failure }: { record?: JobRecord; failur
     if (record.error?.message) lines.push(`error.message: ${redactErrorMessage(record.error.message, body)}`)
   }
   lines.push('앱 내부 요청 설정 (OpenRouter 전송 형식으로 변환 전 · 일부 생략):')
+  lines.push(body ? JSON.stringify(redactRequest(body), null, 2) : '(이 기기에 기록 없음)')
+  return lines.join('\n')
+}
+
+/** Replicate 작업 진단 정보. API 토큰과 프롬프트 원문은 넣지 않습니다. */
+function replicateDiagnostics({ record, failure }: { record?: JobRecord; failure?: SubmissionFailure | null }) {
+  const body = failure?.body ?? record?.request ?? null
+  const lines = [
+    '[Frame · Replicate 진단 정보 · API 토큰·프롬프트 원문 제외]',
+    `작업 ID: ${record?.id || (failure?.status !== undefined && failure.status < 500 ? '없음 (요청 거절됨 · 접수되지 않음)' : '받지 못함 (접수 여부 확인 필요)')}`,
+    `요청 시각: ${failure?.at ?? record?.created_at ?? '알 수 없음'}`,
+    `모델: ${body?.model ?? '알 수 없음'}`,
+  ]
+  if (failure) {
+    lines.push(`엔드포인트: ${failure.endpoint}`)
+    lines.push(`HTTP 상태: ${failure.status ?? '응답 없음 (연결 실패·시간 초과)'}`)
+    if (failure.code) lines.push(`오류 코드: ${failure.code}`)
+    if (failure.message) lines.push(`오류 메시지: ${redactErrorMessage(failure.message, body)}`)
+  } else if (record) {
+    lines.push(`엔드포인트: GET /v1/predictions/${record.id}`)
+    lines.push(`작업 상태: ${record.status}`)
+    if (record.error?.code) lines.push(`error.code: ${record.error.code}`)
+    if (record.error?.message) lines.push(`error.message: ${redactErrorMessage(record.error.message, body)}`)
+  }
+  lines.push('앱 내부 요청 설정 (Replicate input 형식으로 변환 전 · 일부 생략):')
   lines.push(body ? JSON.stringify(redactRequest(body), null, 2) : '(이 기기에 기록 없음)')
   return lines.join('\n')
 }

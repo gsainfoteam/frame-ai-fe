@@ -4,11 +4,18 @@ import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
 import { letsurLocalPlugin } from './vite/letsur-plugin.ts'
 
-const letsurProxy = {
+const apiProxy = {
   '/api': {
     target: 'https://gw.letsur.ai/v1',
     changeOrigin: true,
     rewrite: (p: string) => p.replace(/^\/api/, ''),
+    timeout: 200_000,
+    proxyTimeout: 200_000,
+  },
+  '/replicate-api': {
+    target: 'https://api.replicate.com/v1',
+    changeOrigin: true,
+    rewrite: (p: string) => p.replace(/^\/replicate-api/, ''),
     timeout: 200_000,
     proxyTimeout: 200_000,
   },
@@ -22,9 +29,9 @@ export default defineConfig({
     },
   },
   server: {
-    proxy: letsurProxy,
+    proxy: apiProxy,
   },
   preview: {
-    proxy: letsurProxy,
+    proxy: apiProxy,
   },
 })

@@ -25,13 +25,17 @@ describe('saved connections', () => {
     localStorage.setItem('frame.gateway', 'letsur')
     expect(loadSession().gateway).toBe('letsur')
   })
-  test('both keys survive a reload and clearing one leaves the other intact', () => {
-    saveSession({ gateway: 'openrouter', keys: { openrouter: 'test-or-key', letsur: 'test-letsur-key' } })
+  test('keys for all gateways survive a reload and clearing one leaves the others intact', () => {
+    saveSession({
+      gateway: 'openrouter',
+      keys: { openrouter: 'test-or-key', replicate: 'test-rep-key', letsur: 'test-letsur-key' },
+    })
     const restored = loadSession()
     expect(restored.keys.openrouter).toBe('test-or-key')
+    expect(restored.keys.replicate).toBe('test-rep-key')
     restored.keys.openrouter = ''
     saveSession(restored)
-    expect(loadSession().keys).toEqual({ openrouter: '', letsur: 'test-letsur-key' })
+    expect(loadSession().keys).toEqual({ openrouter: '', replicate: 'test-rep-key', letsur: 'test-letsur-key' })
   })
   test('corrupt or inaccessible storage is reported without preventing startup', () => {
     localStorage.setItem(SESSION_KEY, '{bad json')

@@ -150,11 +150,11 @@ function validateKling(payload: GenerationRequest, spec: ModelSpec) {
 
 /** 게이트웨이마다 받을 수 있는 참조 주소가 다릅니다. 렛서 업로드 참조와 브라우저 보관 이미지는 서로 옮길 수 없습니다. */
 function checkRefScheme(url: string, spec: ModelSpec) {
-  if (spec.gateway === 'openrouter' && /^letsur-/.test(url)) {
-    throw new Error('렛서에 올린 참조(letsur-file://, letsur-asset://)는 OpenRouter로 보낼 수 없습니다. 파일을 다시 선택하거나 HTTPS URL을 입력해주세요.')
+  if (spec.gateway !== 'letsur' && /^letsur-/.test(url)) {
+    throw new Error(`렛서에 올린 참조(letsur-file://, letsur-asset://)는 ${GATEWAYS[spec.gateway].label}로 보낼 수 없습니다. 파일을 다시 선택하거나 HTTPS URL을 입력해주세요.`)
   }
-  if (spec.gateway === 'letsur' && isLocalImageRef(url)) {
-    throw new Error('OpenRouter용으로 브라우저에 보관한 이미지(frame-local://)는 렛서로 보낼 수 없습니다. 파일을 다시 업로드해주세요.')
+  if (spec.gateway !== 'openrouter' && isLocalImageRef(url)) {
+    throw new Error(`OpenRouter용으로 브라우저에 보관한 이미지(frame-local://)는 ${GATEWAYS[spec.gateway].label}로 보낼 수 없습니다. 파일을 다시 업로드해주세요.`)
   }
 }
 
@@ -248,7 +248,8 @@ export function validatePayload(payload: GenerationRequest, spec: ModelSpec) {
   if (payload.mode && !['reference', 'edit', 'extend'].includes(payload.mode)) {
     throw new Error('지원되지 않는 영상 사용 방식입니다.')
   }
-  if (seedance && (framed || payload.mode === 'edit' || payload.mode === 'extend') && payload.aspect_ratio && payload.aspect_ratio !== 'adaptive') {
+  const adaptiveFramed = seedance || (spec.gateway === 'replicate' && spec.id === 'bytedance/seedance-2.5')
+  if (adaptiveFramed && (framed || payload.mode === 'edit' || payload.mode === 'extend') && payload.aspect_ratio && payload.aspect_ratio !== 'adaptive') {
     throw new Error('프레임 지정 또는 영상 편집·연장은 화면 비율을 기본값 또는 자동 맞춤으로 설정해주세요.')
   }
   if (payload.mode === 'edit' && payload.duration !== undefined && payload.duration !== -1) {
@@ -376,6 +377,10 @@ export function inputHint(payload: GenerationRequest, spec: ModelSpec) {
   if (spec.gateway === 'openrouter') {
     const framedOr = Boolean(payload.image_url) || (payload.references ?? []).some((ref) => ref.role === 'first_frame' || ref.role === 'last_frame')
     return `OpenRouter · ${spec.label} · ${framedOr ? '프레임 지정 · 일반 참조와 혼합 불가' : `길이 ${durationLabel(spec)}`}`
+  }
+  if (spec.gateway === 'replicate') {
+    const framedRep = Boolean(payload.image_url) || (payload.references ?? []).some((ref) => ref.role === 'first_frame' || ref.role === 'last_frame')
+    return `Replicate · ${spec.label} · ${framedRep ? '프레임 지정 · 비율은 기본값/자동 맞춤 · 일반 참조와 혼합 불가' : `길이 ${durationLabel(spec)} · 자동(-1) 지원`}`
   }
   if (spec.kind === 'kling-t2v') return `${spec.label} · 텍스트만 · 길이 ${durationLabel(spec)} · 기본 5초`
   if (spec.kind === 'kling-i2v') return `${spec.label} · 시작 프레임 1장 필수 · 비율은 시작 프레임을 따름`
