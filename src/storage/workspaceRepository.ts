@@ -7,7 +7,7 @@ const referenceSchema = z.object({
 
 /** 작성 입력만 저장합니다. File·API 키·재생 URL·통신 중 상태는 저장하지 않습니다. */
 const draftSchema = z.object({
-  draftGateway: z.enum(['openrouter', 'letsur']),
+  draftGateway: z.enum(['openrouter', 'replicate', 'letsur']),
   prompt: z.string(), imageUrl: z.string(), imagePerson: z.boolean(),
   useCommon: z.boolean(), useShared: z.boolean(), refOpen: z.boolean(),
   references: z.array(referenceSchema),

@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { GATEWAYS } from '@/api/gateway'
-import { LETSUR_MODELS, modelCapabilities } from '@/domain/models'
+import { LETSUR_MODELS, REPLICATE_MODELS, modelCapabilities } from '@/domain/models'
 import { resolveModel, useModelStore } from '@/stores/modelStore'
 import { useSessionStore } from '@/stores/sessionStore'
 import { toast } from '@/stores/toastStore'
@@ -28,15 +28,16 @@ export function useActiveModel() {
 
   const spec = resolveModel(gateway, modelId, list)
   const letsur = gateway === 'letsur'
+  const openRouter = gateway === 'openrouter'
   return {
     gateway: GATEWAYS[gateway],
     caps: modelCapabilities(spec),
     spec,
-    models: letsur ? LETSUR_MODELS : list,
+    models: letsur ? LETSUR_MODELS : gateway === 'replicate' ? REPLICATE_MODELS : list,
     /** 렛서에서 이 스페이스에 없는 것으로 확인된 모델 */
     unavailable: (id: string) => letsur && letsurAvailable !== null && !letsurAvailable.includes(id),
-    status: letsur ? 'ready' : status,
-    pendingSelection: !letsur && Boolean(modelId) && !list.some((item) => item.id === modelId) && status !== 'ready',
+    status: openRouter ? status : 'ready',
+    pendingSelection: openRouter && Boolean(modelId) && !list.some((item) => item.id === modelId) && status !== 'ready',
     error,
   }
 }

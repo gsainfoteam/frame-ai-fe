@@ -1,3 +1,5 @@
+import type { GatewayId } from '@/api/gateway'
+
 /** 오류 코드별 안내. 렛서 문서의 오류 처리·Jobs·References·Media Links 표 기준입니다. */
 const CODE_HINTS: Record<string, string> = {
   invalid_credentials: 'API 키 값과 Authorization: Bearer 형식을 확인하세요.',
@@ -89,7 +91,34 @@ export function openRouterHint(status: number, code?: string, raw = '') {
   }
 }
 
-export function describeError(error: unknown, gateway: 'letsur' | 'openrouter' = 'letsur') {
+/** Replicate HTTP API 기준 상태별 안내 */
+export function replicateHint(status: number) {
+  switch (status) {
+    case 400:
+    case 422:
+      return '요청 필드를 확인하세요. 지원하지 않는 생성 옵션·참조 조합(예: 프레임 지정 시 화면 비율 adaptive 필요, 오디오 참조 시 이미지·영상 참조 필요)일 수 있습니다.'
+    case 401:
+      return 'Replicate API 토큰 값을 확인하세요. 토큰이 만료되었거나 잘못 입력되었을 수 있습니다.'
+    case 402:
+      return 'Replicate 계정의 결제 수단 또는 크레딧 잔액을 확인하세요. 반복해서 보내지 마세요.'
+    case 403:
+      return '이 토큰 또는 계정에서 허용되지 않은 요청입니다.'
+    case 404:
+      return '모델 경로 또는 작업(Prediction) ID를 확인하세요. 작업을 만든 계정의 토큰으로 조회해야 합니다.'
+    case 413:
+      return '요청 또는 업로드 파일이 너무 큽니다. Replicate 파일 업로드는 100 MiB 이하만 지원합니다.'
+    case 429:
+      return '요청이 너무 잦습니다. 안내된 시간 뒤에 다시 시도하세요.'
+    case 502:
+    case 503:
+    case 504:
+      return 'Replicate 서버가 일시적으로 응답하지 않습니다. 생성 요청이었다면 접수됐을 수 있으니 Replicate 대시보드에서 확인한 뒤 다시 시도하세요.'
+    default:
+      return ''
+  }
+}
+
+export function describeError(error: unknown, gateway: GatewayId = 'letsur') {
   if (typeof error === 'string') return error
   const e = (error && typeof error === 'object' ? error : {}) as Record<string, unknown>
   const lines: string[] = []
@@ -110,7 +139,9 @@ export function describeError(error: unknown, gateway: 'letsur' | 'openrouter' =
   }
 
   const raw = JSON.stringify(e)
-  if (gateway === 'openrouter') return lines.join('\n') || '요청 처리에 실패했습니다. 서버 응답을 확인해주세요.'
+  if (gateway === 'openrouter' || gateway === 'replicate') {
+    return lines.join('\n') || '요청 처리에 실패했습니다. 서버 응답을 확인해주세요.'
+  }
   if (/AspectRatioTooLarge|AspectRatioTooSmall/.test(raw)) {
     lines.push(
       '참조 이미지의 가로세로 비율이 공급사 자산 등록 조건을 벗어났습니다. 생성 영상의 화면 비율이 아니라 원본 이미지의 비율을 확인하세요. 이미지를 자르거나 여백을 추가해 비율을 바꾼 뒤 다시 업로드하고, 기존 참조도 새 참조로 교체해주세요. 같은 비율로 해상도만 줄이면 해결되지 않습니다. 정확한 허용 범위는 해당 공급사 등록 경로에서 확인해야 합니다.',

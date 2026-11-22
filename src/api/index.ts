@@ -2,6 +2,7 @@ import type { GatewayId } from '@/api/gateway'
 import type { VideoApi } from '@/api/videoApi'
 import { createLetsurClient } from '@/api/letsur/client'
 import { createOpenRouterClient } from '@/api/openrouter/client'
+import { createReplicateClient } from '@/api/replicate/client'
 import { useSessionStore } from '@/stores/sessionStore'
 
 const clients = new Map<GatewayId, VideoApi>()
@@ -11,7 +12,12 @@ export function getVideoApi(gateway: GatewayId): VideoApi {
   let client = clients.get(gateway)
   if (!client) {
     const getKey = () => useSessionStore.getState().keys[gateway]
-    client = gateway === 'openrouter' ? createOpenRouterClient(getKey) : createLetsurClient(getKey)
+    client =
+      gateway === 'openrouter'
+        ? createOpenRouterClient(getKey)
+        : gateway === 'replicate'
+          ? createReplicateClient(getKey)
+          : createLetsurClient(getKey)
     clients.set(gateway, client)
   }
   return client
@@ -22,8 +28,9 @@ export function currentVideoApi() {
   return getVideoApi(useSessionStore.getState().gateway)
 }
 
-/** 결과 미디어를 만든 게이트웨이. OpenRouter 미디어 ID에만 `#`이 있습니다. */
+/** 결과 미디어를 만든 게이트웨이. Replicate는 `replicate:` 접두사, OpenRouter는 `#`으로 구분합니다. */
 export function gatewayOfMedia(mediaId: string): GatewayId {
+  if (mediaId.startsWith('replicate:')) return 'replicate'
   return mediaId.includes('#') ? 'openrouter' : 'letsur'
 }
 

@@ -67,7 +67,7 @@ export function extractErrorRef(payload: unknown): string | undefined {
  */
 export function isRetryableRateLimit(error: GatewayApiError) {
   if (error.status !== 429) return false
-  if (error.gateway === 'openrouter') return true
+  if (error.gateway === 'openrouter' || error.gateway === 'replicate') return true
   return error.code === 'queue_full' || error.code === 'rate_limit_exceeded' || /queue_full/.test(JSON.stringify(error.payload ?? ''))
 }
 

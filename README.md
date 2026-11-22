@@ -50,6 +50,8 @@ bun run preview
 
 렛서는 개발 서버에서 기본 `/api` 프록시를 사용합니다. 정적 배포에서는 기본적으로 `https://gw.letsur.ai/v1`을 직접 호출하며, 필요 시 `VITE_LETSUR_API_BASE`를 지정합니다. Vite의 프록시와 마지막 프레임 다운로드 중계는 정적 호스팅에 배포되지 않습니다. 렛서 직접 호출이 CORS로 제한되거나 자동 프레임 다운로드가 실패하면 별도 중계 또는 UI의 파일 선택 방식을 사용해야 합니다.
 
+Replicate는 기본 `/replicate-api` 프록시를 사용합니다. 로컬에서는 Vite 프록시가, Cloudflare Pages 배포에서는 `functions/replicate-api/[[path]].ts`가 `https://api.replicate.com/v1`로 중계하므로 별도 환경 변수 없이 바로 동작합니다. Cloudflare Pages 외 호스팅에서 별도 중계 서버를 쓴다면 `VITE_REPLICATE_API_BASE`로 지정하세요.
+
 ## 저장하는 데이터
 
 | 데이터 | 저장 위치 | 백업 |

@@ -150,9 +150,9 @@ export function Header() {
         <Field
           className="mb-4"
           label="연결 서비스"
-          hint="새 생성 요청을 보낼 곳입니다. 이미 만든 작업은 해당 서비스로 조회하므로 두 키를 모두 입력해 둘 수 있습니다."
+          hint="새 생성 요청을 보낼 곳입니다. 이미 만든 작업은 해당 서비스로 조회하므로 서비스별 키를 각각 입력해 둘 수 있습니다."
         >
-          <div className="grid grid-cols-2 gap-1 rounded-md border border-line bg-surface p-1" role="radiogroup" aria-label="연결 서비스">
+          <div className="grid grid-cols-3 gap-1 rounded-md border border-line bg-surface p-1" role="radiogroup" aria-label="연결 서비스">
             {GATEWAY_IDS.map((id) => (
               <button
                 key={id}
@@ -194,6 +194,10 @@ export function Header() {
         {gateway.id === 'openrouter' ? (
           <a className="mt-2 inline-block text-xs" href="https://openrouter.ai/settings/keys" target="_blank" rel="noopener noreferrer">
             OpenRouter API 키 발급·사용 한도 설정 ↗
+          </a>
+        ) : gateway.id === 'replicate' ? (
+          <a className="mt-2 inline-block text-xs" href="https://replicate.com/account/api-tokens" target="_blank" rel="noopener noreferrer">
+            Replicate API 토큰 발급·관리 ↗
           </a>
         ) : null}
         {storageFailed ? <p role="alert" className="mt-3 text-sm text-danger">키를 브라우저에 저장하지 못했습니다. 저장 공간과 사이트 저장 권한을 확인해주세요.</p> : null}

@@ -59,7 +59,9 @@ function findRecord(id: string) {
 
 /** 접수됐는지 확인할 수 없는 실패인지, 거절이 확정된 실패인지 구분합니다 (가이드 §8 재시도 판단). */
 function classifySubmitError(err: GatewayApiError) {
-  if (err.status === 400) return { status: '입력 거절', extra: '\n요청은 접수되지 않았습니다. 입력을 수정한 뒤 다시 요청해주세요.' }
+  if (err.status === 400 || err.status === 422) {
+    return { status: '입력 거절', extra: '\n요청은 접수되지 않았습니다. 입력을 수정한 뒤 다시 요청해주세요.' }
+  }
   if (isRetryableRateLimit(err)) {
     return {
       status: err.code === 'rate_limit_exceeded' ? '요청 간격 제한' : '대기열 가득 참',
@@ -69,12 +71,15 @@ function classifySubmitError(err: GatewayApiError) {
   if (err.status !== undefined && err.status >= 400 && err.status < 500) {
     return { status: '요청 거절', extra: '\n요청은 접수되지 않았습니다. 안내에 따라 확인한 뒤 다시 요청해주세요.' }
   }
+  const gateway = err.gateway ?? useSessionStore.getState().gateway
   return {
     status: '접수 확인 필요',
     extra:
-      err.gateway === 'openrouter' || (!err.gateway && useSessionStore.getState().gateway === 'openrouter')
+      gateway === 'openrouter'
         ? '\n접수 여부를 알 수 없습니다. 다시 보내면 중복 생성·과금될 수 있어 자동 재전송하지 않습니다. OpenRouter 활동 기록(Activity)에서 접수 여부를 확인하세요.'
-        : '\n접수 여부를 알 수 없습니다. 다시 보내면 중복 생성·과금될 수 있어 자동 재전송하지 않습니다. 요청 시각과 모델명으로 렛서 담당자에게 접수 여부를 확인하세요(‘문의용 정보 복사’).',
+        : gateway === 'replicate'
+          ? '\n접수 여부를 알 수 없습니다. 다시 보내면 중복 생성·과금될 수 있어 자동 재전송하지 않습니다. Replicate 대시보드(Predictions)에서 접수 여부를 확인하세요.'
+          : '\n접수 여부를 알 수 없습니다. 다시 보내면 중복 생성·과금될 수 있어 자동 재전송하지 않습니다. 요청 시각과 모델명으로 렛서 담당자에게 접수 여부를 확인하세요(‘문의용 정보 복사’).',
   }
 }
 
@@ -123,7 +128,7 @@ export function JobProvider({ children }: { children: ReactNode }) {
       workspace.set(patch)
 
       if (job?.status === 'failed') {
-        workspace.setNotice(describeError(job.error), true)
+        workspace.setNotice(describeError(job.error, gatewayOfJob(watch.id)), true)
       } else if (watch.message) {
         workspace.setNotice(watch.message, watch.messageIsError)
       } else if (watch.phase === 'polling' && watch.nextAt) {
@@ -142,7 +147,7 @@ export function JobProvider({ children }: { children: ReactNode }) {
         const current = useWorkspaceStore.getState().jobId === watch.id
         if (current) renderWatch(watch)
         if (event === 'settled' && watch.job?.status === 'failed') {
-          toast(current ? describeError(watch.job.error) : `작업 ${watch.id} 생성 실패`, true)
+          toast(current ? describeError(watch.job.error, gatewayOfJob(watch.id)) : `작업 ${watch.id} 생성 실패`, true)
         } else if (event === 'settled' && !current && watch.job?.status === 'succeeded') {
           toast(isPreviewRecord(findRecord(watch.id)) ? '시안 생성 완료 · 시안 비교에서 확인하세요.' : `작업 ${watch.id} 생성 완료`)
         } else if ((event === 'error' || event === 'timeout') && current) {
@@ -263,7 +268,12 @@ export function JobProvider({ children }: { children: ReactNode }) {
           lastSubmission: {
             gateway: api.gateway,
             at,
-            endpoint: api.gateway === 'openrouter' ? 'POST /api/v1/videos' : 'POST /v1/video/generations',
+            endpoint:
+              api.gateway === 'openrouter'
+                ? 'POST /api/v1/videos'
+                : api.gateway === 'replicate'
+                  ? `POST /v1/models/${payload.model}/predictions`
+                  : 'POST /v1/video/generations',
             body: payload,
             status: err.status,
             code: err.code,

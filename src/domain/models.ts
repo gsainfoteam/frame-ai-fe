@@ -95,9 +95,29 @@ export const LETSUR_MODELS: ModelSpec[] = [
   ...([3, 4] as const).flatMap((version) => (['kling-t2v', 'kling-i2v', 'kling-omni'] as const).map((kind) => kling(version, kind))),
 ]
 
+/** Replicate 기본 모델. 스키마는 https://replicate.com/bytedance/seedance-2.5/api/schema 기준입니다. */
+export const REPLICATE_SEEDANCE_2_5: ModelSpec = {
+  id: 'bytedance/seedance-2.5',
+  label: 'ByteDance: Seedance 2.5',
+  gateway: 'replicate',
+  description: '텍스트·프레임·이미지·영상·오디오 참조 · 최대 30초 · 네이티브 오디오',
+  autoDuration: true,
+  resolutions: ['480p', '720p'],
+  aspectRatios: ['16:9', '4:3', '1:1', '3:4', '9:16', '21:9', 'adaptive'],
+  durations: range(4, 30),
+  frameImages: ['first_frame', 'last_frame'],
+  audio: true,
+  seed: true,
+  passthrough: ['watermark', 'output_format'],
+}
+
+/** Replicate 영상 모델 목록 */
+export const REPLICATE_MODELS: ModelSpec[] = [REPLICATE_SEEDANCE_2_5]
+
 /** 기록된 작업의 기능. 렛서는 요청의 모델 코드로 Kling 여부를 구분합니다. */
 export function capabilitiesFor(gateway: GatewayId, modelId?: string): GatewayCapabilities {
-  const spec = gateway === 'letsur' ? LETSUR_MODELS.find((item) => item.id === modelId) : undefined
+  const list = gateway === 'letsur' ? LETSUR_MODELS : gateway === 'replicate' ? REPLICATE_MODELS : []
+  const spec = list.find((item) => item.id === modelId)
   return spec ? modelCapabilities(spec) : GATEWAYS[gateway].capabilities
 }
 
@@ -163,7 +183,7 @@ export function requiresOpenRouterAudio(model: string) {
 export function modelAudioMode(spec: ModelSpec): 'optional' | 'required' | 'default' | 'off' {
   if (spec.gateway === 'openrouter' && requiresOpenRouterAudio(spec.id)) return 'required'
   if (spec.audio) return 'optional'
-  return spec.gateway === 'openrouter' ? 'default' : 'off'
+  return spec.gateway === 'letsur' ? 'off' : 'default'
 }
 
 export function generationAudio(spec: ModelSpec, requested: boolean): boolean | undefined {

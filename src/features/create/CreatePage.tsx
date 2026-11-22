@@ -206,7 +206,9 @@ function InquiryButton({ jobId, size = 'md' }: { jobId: string; size?: 'sm' | 'm
               ? '복사하지 못했습니다.'
               : (record?.gateway ?? lastSubmission?.gateway) === 'openrouter'
                 ? '진단 정보를 복사했습니다. OpenRouter 활동 기록(Activity)과 함께 확인하거나 지원 문의에 첨부하세요.'
-                : '문의용 정보를 복사했습니다. 스페이스 이름과 계정 이메일을 채워 렛서 플랫폼의 문의 기능에 남겨주세요.',
+                : (record?.gateway ?? lastSubmission?.gateway) === 'replicate'
+                  ? '진단 정보를 복사했습니다. Replicate 대시보드(Predictions)와 함께 확인하거나 지원 문의에 첨부하세요.'
+                  : '문의용 정보를 복사했습니다. 스페이스 이름과 계정 이메일을 채워 렛서 플랫폼의 문의 기능에 남겨주세요.',
             !ok,
           ),
         )
